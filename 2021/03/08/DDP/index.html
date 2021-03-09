@@ -1,0 +1,294 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PyTorch Distributed：加速数据并行训练的经验 | 论文与代码阅读笔记</title><meta name="keywords" content="分布式训练,机器学习系统,深度学习框架"><meta name="author" content="GDD"><meta name="copyright" content="GDD"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta http-equiv="Cache-Control" content="no-transform"><meta http-equiv="Cache-Control" content="no-siteapp"><meta name="description" content="本文介绍了PyTorch DDP模块的设计、实现和评估。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="PyTorch Distributed：加速数据并行训练的经验">
+<meta property="og:url" content="https://diandiangu.github.io/2021/03/08/DDP/index.html">
+<meta property="og:site_name" content="论文与代码阅读笔记">
+<meta property="og:description" content="本文介绍了PyTorch DDP模块的设计、实现和评估。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://diandiangu.github.io/img/DDP/0.png">
+<meta property="article:published_time" content="2021-03-08T06:08:00.000Z">
+<meta property="article:modified_time" content="2021-03-09T09:43:15.992Z">
+<meta property="article:author" content="GDD">
+<meta property="article:tag" content="分布式训练">
+<meta property="article:tag" content="机器学习系统">
+<meta property="article:tag" content="深度学习框架">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://diandiangu.github.io/img/DDP/0.png"><link rel="shortcut icon" href="/img/favicon.jpeg"><link rel="canonical" href="https://diandiangu.github.io/2021/03/08/DDP/"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css"><script>var GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"search.xml","languages":{"hits_empty":"找不到您查询的内容：${query}"}},
+  translate: {"defaultEncoding":2,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"简"},
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  ClickShowText: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  justifiedGallery: {
+    js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+    css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+};
+
+var saveToLocal = {
+  set: function setWithExpiry(key, value, ttl) {
+    const now = new Date()
+    const expiryDay = ttl * 86400000
+    const item = {
+      value: value,
+      expiry: now.getTime() + expiryDay,
+    }
+    localStorage.setItem(key, JSON.stringify(item))
+  },
+
+  get: function getWithExpiry(key) {
+    const itemStr = localStorage.getItem(key)
+
+    if (!itemStr) {
+      return undefined
+    }
+    const item = JSON.parse(itemStr)
+    const now = new Date()
+
+    if (now.getTime() > item.expiry) {
+      localStorage.removeItem(key)
+      return undefined
+    }
+    return item.value
+  }
+}</script><script id="config_change">var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2021-03-09 17:43:15'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(function () {  window.activateDarkMode = function () {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+    }
+  }
+  window.activateLightMode = function () {
+    document.documentElement.setAttribute('data-theme', 'light')
+   if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+    }
+  }
+  const autoChangeMode = 'false'
+  const t = saveToLocal.get('theme')
+  if (autoChangeMode === '1') {
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+    const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+    const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+    if (t === undefined) {
+      if (isLightMode) activateLightMode()
+      else if (isDarkMode) activateDarkMode()
+      else if (isNotSpecified || hasNoSupport) {
+        const now = new Date()
+        const hour = now.getHours()
+        const isNight = hour <= 6 || hour >= 18
+        isNight ? activateDarkMode() : activateLightMode()
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+        if (saveToLocal.get('theme') === undefined) {
+          e.matches ? activateDarkMode() : activateLightMode()
+        }
+      })
+    } else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else if (autoChangeMode === '2') {
+    const now = new Date()
+    const hour = now.getHours()
+    const isNight = hour <= 6 || hour >= 18
+    if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+    else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else {
+    if (t === 'dark') activateDarkMode()
+    else if (t === 'light') activateLightMode()
+  }const asideStatus = saveToLocal.get('aside-status')
+if (asideStatus !== undefined) {
+   if (asideStatus === 'hide') {
+     document.documentElement.classList.add('hide-aside')
+   } else {
+     document.documentElement.classList.remove('hide-aside')
+   }
+}})()</script><meta name="generator" content="Hexo 5.2.0"><link rel="alternate" href="/atom.xml" title="论文与代码阅读笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="author-avatar"><img class="avatar-img" src="/img/favicon.jpeg" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a></div></div><div class="data-item is-center"><div class="data-item-link"><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div></div></div><div id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/DDP/0.png)"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">论文与代码阅读笔记</a></span><span id="menus"><div id="search_button"><a class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div><span class="close" id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></span></span></nav><div id="post-info"><h1 class="post-title">PyTorch Distributed：加速数据并行训练的经验</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2021-03-08T06:08:00.000Z" title="发表于 2021-03-08 14:08:00">2021-03-08</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2021-03-09T09:43:15.992Z" title="更新于 2021-03-09 17:43:15">2021-03-09</time></span></div><div class="meta-secondline"> </div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h1 id="PyTorch-Distributed-Experiences-on-Accelerating-Data-Parallel-Training"><a href="#PyTorch-Distributed-Experiences-on-Accelerating-Data-Parallel-Training" class="headerlink" title="PyTorch Distributed: Experiences on Accelerating Data Parallel Training"></a>PyTorch Distributed: Experiences on Accelerating Data Parallel Training</h1><p>本文介绍了PyTorch DDP模块的设计、实现和评估。提供一个通用的数据并行训练package有三方面考验：</p>
+<ul>
+<li><strong>数学上的等价：</strong>需要保证和本地训练一样的训练收益</li>
+<li><strong>无需大量修改用户代码的以及截获性的API：</strong>方便用户运行数据并行训练，也要允许用户自定义通信和优化</li>
+<li><strong>高效：</strong>较高的训练吞吐量</li>
+</ul>
+<h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>训练DNN模型的三步：</p>
+<ol>
+<li>Forward pass: 计算损失</li>
+<li>Backward pass: 计算梯度</li>
+<li>Optimizer step: 更新参数</li>
+</ol>
+<p>PyTorch DDP采用all-reduce通信。All-recude是一种同步的通信机制，因为all-reduce只有在所有进程都准备好之后才能开始通信。与之相反，PS中采用的是P2P的通信方式。</p>
+<h2 id="系统设计"><a href="#系统设计" class="headerlink" title="系统设计"></a>系统设计</h2><h3 id="梯度Reduction"><a href="#梯度Reduction" class="headerlink" title="梯度Reduction"></a>梯度Reduction</h3><p>在过去的版本中，梯度Reduction的计算方法一直在不断改进。</p>
+<ol>
+<li><p><strong>Naive solution：</strong>DDP控制所有的训练进程（1）从同一个模型状态开始训练；（2）在每个iteration用同样的梯度。<br>通过在每次local backward之后梯度同步，或者加hook就可以实现（2），但是有两个performance上的问题：<br>小tensor中collective communication效率非常低<br>把梯度计算和同步分开之后，就不能把它们overlap了</p>
+</li>
+<li><p><strong>Gradient bucketing：</strong>Collective communications在大tensor上通信效率更高。因此，可以通过gradient reduction将几个梯度打包成一个allreduce操作。然而，为了让通信和计算overlap，DDP不能把所有的梯度都打包到一个allreduce里。</p>
+</li>
+<li><p><strong>计算和通信overlap：</strong>在bucketing中，DDP只需要等一个bucket中的所有数据都准备好通信。需要注意（1）在所有进程中reduce的顺序一定要相同；（2）有时不同进程里backward中gradient计算顺序不同，或有的gradient被跳过，此时会导致hang。</p>
+</li>
+</ol>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/DDP/2.png" width="65%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图1：分布式梯度reduction</div>
+</center>
+
+<br>
+
+<ol start="4">
+<li><strong>梯度累积：</strong>每n个iteration进行一次allreduce。</li>
+</ol>
+<h3 id="Collective-Communication"><a href="#Collective-Communication" class="headerlink" title="Collective Communication"></a>Collective Communication</h3><p>DDP建立在NCCL、Gloo和MPI等通信库之上，把通信库里的API打包到ProcessGroup API中。在DDP里，worker需要加入通信组才能进行相关通信。</p>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><ul>
+<li>Python前端：有很多可以configure的节点，例如process group等等；支持单机多卡的模型并行；支持模型buffer，rank 0负责存储buffer的内容，在forward前将rank 0上buffer的内容broadcast到其他设备上。</li>
+<li>核心梯度reduction：确保同一bucket中的parameter都来自同一个device；通过一个count来判断当前backward到了第几层，从而在合适的时候allreduce；默认bucket size为25M；在CPU上创建位图来保存本地没有使用的参数信息，并通过一个额外的allreduce得到global bitmap。</li>
+</ul>
+<h2 id="实验评估"><a href="#实验评估" class="headerlink" title="实验评估"></a>实验评估</h2><ul>
+<li>比较了不同模型、使用不同backend、有无通信和训练的overlap，并将latency breakdown为不同的部分来分析。</li>
+</ul>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/DDP/3.png" width="60%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图2：breakdown每个iteration的latency</div>
+</center>
+
+<br>
+
+<ul>
+<li>比较了不同的bucket size的影响。</li>
+</ul>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/DDP/4.png" width="95%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图3：bucket size v.s. latency</div>
+</center>
+
+<br>
+
+<ul>
+<li><p>比较了使用不同数量GPU时的latency、不同同步步调的latency以及loss。</p>
+</li>
+<li><p>DDP通过使用多个round-robin（轮询调度）进程组从而充分利用带宽。实验比较了使用不同数量进程组对latency的影响。</p>
+</li>
+</ul>
+<h2 id="讨论"><a href="#讨论" class="headerlink" title="讨论"></a>讨论</h2><p>没有适用于所有情况的configuration，但是可以总结出一些规则来帮助找到最佳configuration：</p>
+<ul>
+<li><p>通信backend：多数情况下，NCCL比Gloo快</p>
+</li>
+<li><p>Bucket size：随着模型的增大而增大</p>
+</li>
+<li><p>Resource allocation：用NCCL时，建议把所有的worker都放到同一台机器上的同一个进程组中</p>
+</li>
+</ul>
+<p>未来优化方向:</p>
+<ul>
+<li><p>梯度顺序预测：使用自动梯度计算hook记录backward的order，并相应地向bucket mapping中更新参数</p>
+</li>
+<li><p>Layer dropping：在forward的过程中随机drop掉几层（加速训练，避免过拟合）；与此同时相应修改parameter-to-bucket mapping，或从bucket level drop</p>
+</li>
+<li><p>梯度压缩： 只通信需要高精度的梯度</p>
+</li>
+</ul>
+<hr>
+<p><strong>原文作者：</strong>Shen Li, Yanli Zhao, Rohan Varma, Omkar Salpekar, Pieter Noordhuis, Teng Li, Adam Paszke, Jeff Smith, Brian Vaughan, Pritam Damania, Soumith Chintala†<br><strong>原文链接：</strong><a target="_blank" rel="noopener" href="https://arxiv.org/pdf/2006.15704.pdf">https://arxiv.org/pdf/2006.15704.pdf</a><br><strong>项目代码：</strong><a target="_blank" rel="noopener" href="https://github.com/pytorch/pytorch">https://github.com/pytorch/pytorch</a><br><strong>参考文献：</strong>[1] PyTorch Distributed: Experiences on Accelerating Data Parallel Training <a target="_blank" rel="noopener" href="https://ruipeterpan.gitbook.io/paper-reading-notes/machine-learning-systems/index/pytorch-distributed-experiences-on-accelerating-data-parallel-training">https://ruipeterpan.gitbook.io/paper-reading-notes/machine-learning-systems/index/pytorch-distributed-experiences-on-accelerating-data-parallel-training</a></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">GDD</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://diandiangu.github.io/2021/03/08/DDP/">https://diandiangu.github.io/2021/03/08/DDP/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://diandiangu.github.io" target="_blank">论文与代码阅读笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/">分布式训练</a><a class="post-meta__tags" href="/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/">机器学习系统</a><a class="post-meta__tags" href="/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%A1%86%E6%9E%B6/">深度学习框架</a></div><div class="post_share"><div class="social-share" data-image="/img/DDP/0.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="next-post pull-full"><a href="/2021/03/07/Elan/"><img class="next-cover" src="/img/Elan/1.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">Elan: 面向深度学习的通用弹性训练</div></div></a></div></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span> 相关推荐</span></div><div class="relatedPosts-list"><div><a href="/2020/12/07/BS/" title="ByteScheduler: 加速分布式训练的通信调度器"><img class="cover" src="/img/BS/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-07</div><div class="title">ByteScheduler: 加速分布式训练的通信调度器</div></div></a></div><div><a href="/2021/03/02/MLsystem/" title="机器学习系统方向值得关注的paper"><img class="cover" src="/img/MLsystem/MLsystem.jpg" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-03-02</div><div class="title">机器学习系统方向值得关注的paper</div></div></a></div><div><a href="/2020/12/02/AntMan-0/" title="AntMan：面向深度学习的GPU集群动态弹性伸缩方法"><img class="cover" src="/img/antman/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-02</div><div class="title">AntMan：面向深度学习的GPU集群动态弹性伸缩方法</div></div></a></div><div><a href="/2021/03/07/Elan/" title="Elan: 面向深度学习的通用弹性训练"><img class="cover" src="/img/Elan/1.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-03-07</div><div class="title">Elan: 面向深度学习的通用弹性训练</div></div></a></div><div><a href="/2021/03/07/Gandiva-fair/" title="在异构GPU集群中权衡效率与公平性"><img class="cover" src="/img/Gandiva_fair/1.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-03-07</div><div class="title">在异构GPU集群中权衡效率与公平性</div></div></a></div><div><a href="/2020/12/22/HiveD/" title="HiveD：为深度学习任务共享GPU集群提供保障"><img class="cover" src="/img/HiveD/1.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-22</div><div class="title">HiveD：为深度学习任务共享GPU集群提供保障</div></div></a></div></div></div></div><div class="aside_content" id="aside_content"><div class="card-widget card-info"><div class="card-content"><div class="card-info-avatar is-center"><img class="avatar-img" src="/img/favicon.jpeg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/><div class="author-info__name">GDD</div><div class="author-info__description"></div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a></div><div class="card-info-data-item is-center"><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gudiandian"><i class="fab fa-github"></i><span>Follow Me</span></a></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="card-content"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#PyTorch-Distributed-Experiences-on-Accelerating-Data-Parallel-Training"><span class="toc-number">1.</span> <span class="toc-text">PyTorch Distributed: Experiences on Accelerating Data Parallel Training</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%83%8C%E6%99%AF"><span class="toc-number">1.1.</span> <span class="toc-text">背景</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1"><span class="toc-number">1.2.</span> <span class="toc-text">系统设计</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%A2%AF%E5%BA%A6Reduction"><span class="toc-number">1.2.1.</span> <span class="toc-text">梯度Reduction</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Collective-Communication"><span class="toc-number">1.2.2.</span> <span class="toc-text">Collective Communication</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%9E%E7%8E%B0"><span class="toc-number">1.3.</span> <span class="toc-text">实现</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%9E%E9%AA%8C%E8%AF%84%E4%BC%B0"><span class="toc-number">1.4.</span> <span class="toc-text">实验评估</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%AE%A8%E8%AE%BA"><span class="toc-number">1.5.</span> <span class="toc-text">讨论</span></a></li></ol></li></ol></div></div></div><div class="card-widget card-recent-post"><div class="card-content"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2021/03/08/DDP/" title="PyTorch Distributed：加速数据并行训练的经验"><img src="/img/DDP/0.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="PyTorch Distributed：加速数据并行训练的经验"/></a><div class="content"><a class="title" href="/2021/03/08/DDP/" title="PyTorch Distributed：加速数据并行训练的经验">PyTorch Distributed：加速数据并行训练的经验</a><time datetime="2021-03-08T06:08:00.000Z" title="发表于 2021-03-08 14:08:00">2021-03-08</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/07/Elan/" title="Elan: 面向深度学习的通用弹性训练"><img src="/img/Elan/1.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Elan: 面向深度学习的通用弹性训练"/></a><div class="content"><a class="title" href="/2021/03/07/Elan/" title="Elan: 面向深度学习的通用弹性训练">Elan: 面向深度学习的通用弹性训练</a><time datetime="2021-03-07T07:45:42.000Z" title="发表于 2021-03-07 15:45:42">2021-03-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/07/Gandiva-fair/" title="在异构GPU集群中权衡效率与公平性"><img src="/img/Gandiva_fair/1.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="在异构GPU集群中权衡效率与公平性"/></a><div class="content"><a class="title" href="/2021/03/07/Gandiva-fair/" title="在异构GPU集群中权衡效率与公平性">在异构GPU集群中权衡效率与公平性</a><time datetime="2021-03-07T06:17:58.000Z" title="发表于 2021-03-07 14:17:58">2021-03-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/02/MLsystem/" title="机器学习系统方向值得关注的paper"><img src="/img/MLsystem/MLsystem.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="机器学习系统方向值得关注的paper"/></a><div class="content"><a class="title" href="/2021/03/02/MLsystem/" title="机器学习系统方向值得关注的paper">机器学习系统方向值得关注的paper</a><time datetime="2021-03-02T07:46:38.000Z" title="发表于 2021-03-02 15:46:38">2021-03-02</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2020/12/25/survey/" title="机器学习/深度学习领域的Survey"><img src="/img/survey/survey.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="机器学习/深度学习领域的Survey"/></a><div class="content"><a class="title" href="/2020/12/25/survey/" title="机器学习/深度学习领域的Survey">机器学习/深度学习领域的Survey</a><time datetime="2020-12-25T05:13:39.000Z" title="发表于 2020-12-25 13:13:39">2020-12-25</time></div></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2021 By GDD</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="translateLink" type="button" title="简繁转换">简</button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></div><div id="local-search"><div class="search-dialog"><div class="search-dialog__title" id="local-search-title">本地搜索</div><div id="local-input-panel"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div></div><hr/><div id="local-search-results"><div id="local-hits"></div><div id="local-stats"><div class="local-search-stats__hr" id="hr"><span>由</span> <a target="_blank" rel="noopener" href="https://github.com/wzpan/hexo-generator-search" style="color:#49B1F5;">hexo-generator-search</a>
+ <span>提供支持</span></div></div></div><span class="search-close-button"><i class="fas fa-times"></i></span></div><div id="search-mask"></div></div><div><script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="/js/tw_cn.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js"></script><script src="/js/search/local-search.js"></script><div class="js-pjax"><script>if (!window.MathJax) {
+  window.MathJax = {
+    loader: {
+      source: {
+        '[tex]/amsCd': '[tex]/amscd'
+      }
+    },
+    tex: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"]],
+      tags: 'ams'
+    },
+    options: {
+      renderActions: {
+        findScript: [10, doc => {
+          for (const node of document.querySelectorAll('script[type^="math/tex"]')) {
+            const display = !!node.type.match(/; *mode=display/)
+            const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display)
+            const text = document.createTextNode('')
+            node.parentNode.replaceChild(text, node)
+            math.start = {node: text, delim: '', n: 0}
+            math.end = {node: text, delim: '', n: 0}
+            doc.math.push(math)
+          }
+        }, ''],
+        addClass: [200,() => {
+          document.querySelectorAll('mjx-container:not([display=\'true\']').forEach( node => {
+            const target = node.parentNode
+            if (!target.classList.contains('has-jax')) {
+              target.classList.add('mathjax-overflow')
+            }
+          })
+        }, '', false]
+      }
+    }
+  }
+  
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'
+  script.id = 'MathJax-script'
+  script.async = true
+  document.head.appendChild(script)
+} else {
+  MathJax.startup.document.state(0)
+  MathJax.texReset()
+  MathJax.typeset()
+}</script></div></div></body></html>

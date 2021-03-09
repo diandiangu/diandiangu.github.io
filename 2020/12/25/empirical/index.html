@@ -1,0 +1,258 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>深度学习及其他领域的Empirical Study | 论文与代码阅读笔记</title><meta name="keywords" content="深度学习,软件工程,实证研究"><meta name="author" content="GDD"><meta name="copyright" content="GDD"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta http-equiv="Cache-Control" content="no-transform"><meta http-equiv="Cache-Control" content="no-siteapp"><meta name="description" content="总结与深度学习相关的Empirical Study，以及其他领域中类似的Empirical Study。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="深度学习及其他领域的Empirical Study">
+<meta property="og:url" content="https://diandiangu.github.io/2020/12/25/empirical/index.html">
+<meta property="og:site_name" content="论文与代码阅读笔记">
+<meta property="og:description" content="总结与深度学习相关的Empirical Study，以及其他领域中类似的Empirical Study。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://diandiangu.github.io/img/empirical/empirical.png">
+<meta property="article:published_time" content="2020-12-25T02:38:22.000Z">
+<meta property="article:modified_time" content="2021-03-09T07:55:09.469Z">
+<meta property="article:author" content="GDD">
+<meta property="article:tag" content="深度学习">
+<meta property="article:tag" content="软件工程">
+<meta property="article:tag" content="实证研究">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://diandiangu.github.io/img/empirical/empirical.png"><link rel="shortcut icon" href="/img/favicon.jpeg"><link rel="canonical" href="https://diandiangu.github.io/2020/12/25/empirical/"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css"><script>var GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"search.xml","languages":{"hits_empty":"找不到您查询的内容：${query}"}},
+  translate: {"defaultEncoding":2,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"简"},
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  ClickShowText: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  justifiedGallery: {
+    js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+    css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+};
+
+var saveToLocal = {
+  set: function setWithExpiry(key, value, ttl) {
+    const now = new Date()
+    const expiryDay = ttl * 86400000
+    const item = {
+      value: value,
+      expiry: now.getTime() + expiryDay,
+    }
+    localStorage.setItem(key, JSON.stringify(item))
+  },
+
+  get: function getWithExpiry(key) {
+    const itemStr = localStorage.getItem(key)
+
+    if (!itemStr) {
+      return undefined
+    }
+    const item = JSON.parse(itemStr)
+    const now = new Date()
+
+    if (now.getTime() > item.expiry) {
+      localStorage.removeItem(key)
+      return undefined
+    }
+    return item.value
+  }
+}</script><script id="config_change">var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2021-03-09 15:55:09'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(function () {  window.activateDarkMode = function () {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+    }
+  }
+  window.activateLightMode = function () {
+    document.documentElement.setAttribute('data-theme', 'light')
+   if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+    }
+  }
+  const autoChangeMode = 'false'
+  const t = saveToLocal.get('theme')
+  if (autoChangeMode === '1') {
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+    const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+    const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+    if (t === undefined) {
+      if (isLightMode) activateLightMode()
+      else if (isDarkMode) activateDarkMode()
+      else if (isNotSpecified || hasNoSupport) {
+        const now = new Date()
+        const hour = now.getHours()
+        const isNight = hour <= 6 || hour >= 18
+        isNight ? activateDarkMode() : activateLightMode()
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+        if (saveToLocal.get('theme') === undefined) {
+          e.matches ? activateDarkMode() : activateLightMode()
+        }
+      })
+    } else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else if (autoChangeMode === '2') {
+    const now = new Date()
+    const hour = now.getHours()
+    const isNight = hour <= 6 || hour >= 18
+    if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+    else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else {
+    if (t === 'dark') activateDarkMode()
+    else if (t === 'light') activateLightMode()
+  }const asideStatus = saveToLocal.get('aside-status')
+if (asideStatus !== undefined) {
+   if (asideStatus === 'hide') {
+     document.documentElement.classList.add('hide-aside')
+   } else {
+     document.documentElement.classList.remove('hide-aside')
+   }
+}})()</script><meta name="generator" content="Hexo 5.2.0"><link rel="alternate" href="/atom.xml" title="论文与代码阅读笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="author-avatar"><img class="avatar-img" src="/img/favicon.jpeg" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a></div></div><div class="data-item is-center"><div class="data-item-link"><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div></div></div><div id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/empirical/empirical.png)"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">论文与代码阅读笔记</a></span><span id="menus"><div id="search_button"><a class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div><span class="close" id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></span></span></nav><div id="post-info"><h1 class="post-title">深度学习及其他领域的Empirical Study</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2020-12-25T02:38:22.000Z" title="发表于 2020-12-25 10:38:22">2020-12-25</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2021-03-09T07:55:09.469Z" title="更新于 2021-03-09 15:55:09">2021-03-09</time></span></div><div class="meta-secondline"> </div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h2 id="深度学习领域的Empirical-Study"><a href="#深度学习领域的Empirical-Study" class="headerlink" title="深度学习领域的Empirical Study"></a>深度学习领域的Empirical Study</h2><ul>
+<li><p><strong>An Empirical Study on TensorFlow Program Bugs</strong> (ISSTA’18) [<a target="_blank" rel="noopener" href="http://sccpu2.cse.ust.hk/castle/materials/issta18main-p98-p.pdf#:~:text=An%20Empirical%20Study%20on%20TensorFlow%20Program%20Bugs%20ISSTA'18%2C,further%20divided%20into%20two%20sub-phases%3A%20training%20and%20testing.">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究使用TensorFlow框架的程序中bug产生的原因、检测bug的挑战、用户如何应对检测bug的挑战、定位bug的挑战、用户如何应对定位bug的挑战。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p>
+</li>
+<li><p><strong>A Comprehensive Study on Deep Learning Bug Characteristics</strong> (ESEC/FSE’19)[<a target="_blank" rel="noopener" href="https://dl.acm.org/doi/pdf/10.1145/3338906.3338955">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究使用5种流行的深度学习框架会遇到的bug类型、根本原因、产生的影响、Bug出现的阶段、共性以及bug的演变。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p>
+</li>
+<li><p><strong>An Empirical Study on Program Failures of Deep Learning Jobs</strong> (ICSE’20 <strong>Distinguished Paper Award</strong>) [<a target="_blank" rel="noopener" href="https://wencongxiao.github.io/res/icse20/icse20-main-199.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>深度学习任务failure的种类、根本原因和现有测试/诊断方法。</p>
+<p>  <strong>方法：</strong>通过研究微软集群中实际遇到的fault，并对6位微软的开发者进行访问。</p>
+</li>
+<li><p><strong>Taxonomy of Real Faults in Deep Learning Systems</strong> (ICSE’20) [<a target="_blank" rel="noopener" href="https://arxiv.org/pdf/1910.11015.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究在使用深度学习系统中会遇到的错误。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据，并通过20位科研工作者/从业人员进行label。</p>
+</li>
+<li><p><strong>Repairing Deep Neural Networks: Fix Patterns and Challenges</strong> (ICSE’20) [<a target="_blank" rel="noopener" href="https://dl.acm.org/doi/pdf/10.1145/3377811.3380378">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究在深度神经网络中中bug的fix pattern和挑战。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p>
+</li>
+<li><p><strong>An Empirical Study on Bugs inside TensorFlow</strong> (DASFAA’20) [<a target="_blank" rel="noopener" href="http://www.cs.sjtu.edu.cn/~zhonghao/paper/tfbug.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究TensorFlow框架内部bug的症状、根本原因和位置。</p>
+<p>  <strong>方法：</strong>挖掘2017-2019年之间github上的bug。</p>
+</li>
+<li><p><strong>A Comprehensive Study on Challenges in Deploying Deep Learning Based Software</strong> (ESEC/FSE’20) [<a target="_blank" rel="noopener" href="https://chenzhenpeng18.github.io/papers/FSE20_1.pdf">PDF</a>]</p>
+<p>  内容：探究部署深度学习应用的挑战。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p>
+</li>
+<li><p><strong>An Empirical Study on Deployment Faults of Deep Learning Based Mobile Applications</strong> (ICSE’21) [<a target="_blank" rel="noopener" href="https://chenzhenpeng18.github.io/papers/ICSE21.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究在移动端部署深度学习应用时的错误的症状和解决办法。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p>
+</li>
+</ul>
+<h2 id="其他领域的相关工作"><a href="#其他领域的相关工作" class="headerlink" title="其他领域的相关工作"></a>其他领域的相关工作</h2><ul>
+<li><p><strong>A Characteristic Study on Failures of Production Distributed Data-Parallel Programs</strong> (ICSE’13) <a target="_blank" rel="noopener" href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/icse13seip.pdf">PDF</a></p>
+<p>  <strong>内容：</strong>探究分布式数据并行程序中数据和代码的缺陷的symptom、root cause、fix以及debugging practice。</p>
+<p>  <strong>方法：</strong>挖掘Microsoft集群中的SCOPE job。</p>
+</li>
+<li><p><strong>Software Documentation Issues Unveiled</strong> (ICSE’19) [<a target="_blank" rel="noopener" href="https://www.inf.usi.ch/phd/aghajani/resources/papers/agha2019b.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>对文档中的问题进行分类。</p>
+<p>  <strong>方法：</strong>挖掘emails, github issue, GitHub pull-requests和 Stack Overflow中的数据。</p>
+</li>
+<li><p><strong>Going Big: A Large-Scale Study on What Big Data Developers Ask</strong> (ESEC/FSE’19) [<a target="_blank" rel="noopener" href="https://academicworks.cuny.edu/cgi/viewcontent.cgi?article=1615&context=hc_pubs">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究大数据开发者所关心的主题、主题分类、主题流行度、主题难度、主题流行度和难度之间的关联度。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p>
+</li>
+</ul>
+<ul>
+<li><p><strong>Understanding Privacy-Related Questions on Stack Overflow</strong> (CHI’20) [<a target="_blank" rel="noopener" href="https://groups.inf.ed.ac.uk/tulips/papers/tahaei2020SO.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究SO用户会将什么话题与“隐私”问题关联，以及用户为什么要参与到隐私相关话题中。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p>
+</li>
+<li><p><strong>Understanding Build Issue Resolution in Practice: Symptoms and Fix Patterns</strong> (ESEC/FSE’20) [<a target="_blank" rel="noopener" href="https://chenzhenpeng18.github.io/papers/FSE20_2.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>探究构建（build）中用户所关心的话题、遇到问题的症状及根本原因。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p>
+</li>
+<li><p><strong>Interpreting Cloud Computer Vision Pain-Points: A Mining Study of Stack Overflow</strong> (ICSE’20) [<a target="_blank" rel="noopener" href="https://arxiv.org/pdf/2001.10130.pdf">PDF</a>]</p>
+<p>  <strong>内容：</strong>分析探究Cloud CV领域研究者遇到的痛点。</p>
+<p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p>
+</li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">GDD</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://diandiangu.github.io/2020/12/25/empirical/">https://diandiangu.github.io/2020/12/25/empirical/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://diandiangu.github.io" target="_blank">论文与代码阅读笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0/">深度学习</a><a class="post-meta__tags" href="/tags/%E8%BD%AF%E4%BB%B6%E5%B7%A5%E7%A8%8B/">软件工程</a><a class="post-meta__tags" href="/tags/%E5%AE%9E%E8%AF%81%E7%A0%94%E7%A9%B6/">实证研究</a></div><div class="post_share"><div class="social-share" data-image="/img/empirical/empirical.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-left"><a href="/2020/12/25/survey/"><img class="prev-cover" src="/img/survey/survey.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">机器学习/深度学习领域的Survey</div></div></a></div><div class="next-post pull-right"><a href="/2020/12/22/HiveD/"><img class="next-cover" src="/img/HiveD/1.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">HiveD：为深度学习任务共享GPU集群提供保障</div></div></a></div></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span> 相关推荐</span></div><div class="relatedPosts-list"><div><a href="/2020/12/25/survey/" title="机器学习/深度学习领域的Survey"><img class="cover" src="/img/survey/survey.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-25</div><div class="title">机器学习/深度学习领域的Survey</div></div></a></div></div></div></div><div class="aside_content" id="aside_content"><div class="card-widget card-info"><div class="card-content"><div class="card-info-avatar is-center"><img class="avatar-img" src="/img/favicon.jpeg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/><div class="author-info__name">GDD</div><div class="author-info__description"></div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a></div><div class="card-info-data-item is-center"><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gudiandian"><i class="fab fa-github"></i><span>Follow Me</span></a></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="card-content"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E9%A2%86%E5%9F%9F%E7%9A%84Empirical-Study"><span class="toc-number">1.</span> <span class="toc-text">深度学习领域的Empirical Study</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%B6%E4%BB%96%E9%A2%86%E5%9F%9F%E7%9A%84%E7%9B%B8%E5%85%B3%E5%B7%A5%E4%BD%9C"><span class="toc-number">2.</span> <span class="toc-text">其他领域的相关工作</span></a></li></ol></div></div></div><div class="card-widget card-recent-post"><div class="card-content"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2021/03/08/DDP/" title="PyTorch Distributed：加速数据并行训练的经验"><img src="/img/DDP/0.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="PyTorch Distributed：加速数据并行训练的经验"/></a><div class="content"><a class="title" href="/2021/03/08/DDP/" title="PyTorch Distributed：加速数据并行训练的经验">PyTorch Distributed：加速数据并行训练的经验</a><time datetime="2021-03-08T06:08:00.000Z" title="发表于 2021-03-08 14:08:00">2021-03-08</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/07/Elan/" title="Elan: 面向深度学习的通用弹性训练"><img src="/img/Elan/1.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Elan: 面向深度学习的通用弹性训练"/></a><div class="content"><a class="title" href="/2021/03/07/Elan/" title="Elan: 面向深度学习的通用弹性训练">Elan: 面向深度学习的通用弹性训练</a><time datetime="2021-03-07T07:45:42.000Z" title="发表于 2021-03-07 15:45:42">2021-03-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/07/Gandiva-fair/" title="在异构GPU集群中权衡效率与公平性"><img src="/img/Gandiva_fair/1.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="在异构GPU集群中权衡效率与公平性"/></a><div class="content"><a class="title" href="/2021/03/07/Gandiva-fair/" title="在异构GPU集群中权衡效率与公平性">在异构GPU集群中权衡效率与公平性</a><time datetime="2021-03-07T06:17:58.000Z" title="发表于 2021-03-07 14:17:58">2021-03-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/02/MLsystem/" title="机器学习系统方向值得关注的paper"><img src="/img/MLsystem/MLsystem.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="机器学习系统方向值得关注的paper"/></a><div class="content"><a class="title" href="/2021/03/02/MLsystem/" title="机器学习系统方向值得关注的paper">机器学习系统方向值得关注的paper</a><time datetime="2021-03-02T07:46:38.000Z" title="发表于 2021-03-02 15:46:38">2021-03-02</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2020/12/25/survey/" title="机器学习/深度学习领域的Survey"><img src="/img/survey/survey.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="机器学习/深度学习领域的Survey"/></a><div class="content"><a class="title" href="/2020/12/25/survey/" title="机器学习/深度学习领域的Survey">机器学习/深度学习领域的Survey</a><time datetime="2020-12-25T05:13:39.000Z" title="发表于 2020-12-25 13:13:39">2020-12-25</time></div></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2021 By GDD</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="translateLink" type="button" title="简繁转换">简</button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></div><div id="local-search"><div class="search-dialog"><div class="search-dialog__title" id="local-search-title">本地搜索</div><div id="local-input-panel"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div></div><hr/><div id="local-search-results"><div id="local-hits"></div><div id="local-stats"><div class="local-search-stats__hr" id="hr"><span>由</span> <a target="_blank" rel="noopener" href="https://github.com/wzpan/hexo-generator-search" style="color:#49B1F5;">hexo-generator-search</a>
+ <span>提供支持</span></div></div></div><span class="search-close-button"><i class="fas fa-times"></i></span></div><div id="search-mask"></div></div><div><script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="/js/tw_cn.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js"></script><script src="/js/search/local-search.js"></script><div class="js-pjax"><script>if (!window.MathJax) {
+  window.MathJax = {
+    loader: {
+      source: {
+        '[tex]/amsCd': '[tex]/amscd'
+      }
+    },
+    tex: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"]],
+      tags: 'ams'
+    },
+    options: {
+      renderActions: {
+        findScript: [10, doc => {
+          for (const node of document.querySelectorAll('script[type^="math/tex"]')) {
+            const display = !!node.type.match(/; *mode=display/)
+            const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display)
+            const text = document.createTextNode('')
+            node.parentNode.replaceChild(text, node)
+            math.start = {node: text, delim: '', n: 0}
+            math.end = {node: text, delim: '', n: 0}
+            doc.math.push(math)
+          }
+        }, ''],
+        addClass: [200,() => {
+          document.querySelectorAll('mjx-container:not([display=\'true\']').forEach( node => {
+            const target = node.parentNode
+            if (!target.classList.contains('has-jax')) {
+              target.classList.add('mathjax-overflow')
+            }
+          })
+        }, '', false]
+      }
+    }
+  }
+  
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'
+  script.id = 'MathJax-script'
+  script.async = true
+  document.head.appendChild(script)
+} else {
+  MathJax.startup.document.state(0)
+  MathJax.texReset()
+  MathJax.typeset()
+}</script></div></div></body></html>
