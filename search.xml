@@ -14,13 +14,13 @@
       
         <tags>
             
-            <tag> 分布式训练 </tag>
-            
-            <tag> 机器学习系统 </tag>
-            
             <tag> SOSP </tag>
             
+            <tag> 分布式训练 </tag>
+            
             <tag> 通信调度 </tag>
+            
+            <tag> 机器学习系统 </tag>
             
             <tag> 深度学习框架 </tag>
             
@@ -91,9 +91,9 @@
             
             <tag> 分布式训练 </tag>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> 集群调度 </tag>
             
             <tag> EuroSys </tag>
             
@@ -116,11 +116,11 @@
             
             <tag> 分布式训练 </tag>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 机器学习系统 </tag>
             
             <tag> 深度学习框架 </tag>
+            
+            <tag> 集群调度 </tag>
             
         </tags>
       
@@ -183,13 +183,13 @@
       
         <tags>
             
-            <tag> OSDI </tag>
-            
             <tag> 分布式训练 </tag>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
+            
+            <tag> 集群调度 </tag>
             
         </tags>
       
@@ -231,9 +231,9 @@
       
         <tags>
             
-            <tag> OSDI </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
             
             <tag> 上下文切换 </tag>
             
@@ -256,13 +256,13 @@
       
         <tags>
             
-            <tag> 分布式训练 </tag>
-            
-            <tag> 机器学习系统 </tag>
-            
             <tag> SOSP </tag>
             
+            <tag> 分布式训练 </tag>
+            
             <tag> 通信调度 </tag>
+            
+            <tag> 机器学习系统 </tag>
             
             <tag> 深度学习框架 </tag>
             
@@ -283,13 +283,13 @@
       
         <tags>
             
-            <tag> OSDI </tag>
-            
             <tag> 分布式训练 </tag>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
+            
+            <tag> 集群调度 </tag>
             
         </tags>
       
