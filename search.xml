@@ -4,6 +4,31 @@
   
     
     <entry>
+      <title>Pollux：优化深度学习Goodput的自适应集群调度</title>
+      <link href="2021/05/14/Pollux/"/>
+      <url>2021/05/14/Pollux/</url>
+      
+        <content type="html"><![CDATA[<h1 id="Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning"><a href="#Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning" class="headerlink" title="Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning"></a>Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning</h1><p>现有的深度学习调度程序器要求提交作业的用户指定各种超参数，如果设置得不正确，这些参数会大大降低作业性能和资源效率。在这些参数中，batch size和learning rate非常依赖于其资源分配（GPU数量），这使得在共享资源环境中很难预先确定这些参数。此外，深度学习任务能否有效利用的资源分配不仅取决于所训练模型的结构，而且还取决于batch size和learning rate。资源数量、batch size、learning rate之间的这种相互依赖性，使得用户必须同时考虑到这些因素才能配置其作业以实现高效执行和资源利用。</p><p>从根本上讲，一个有效配置的深度学习任务需要在两种期望之间取得trade off：（1）系统吞吐量，即每个单位时间处理的训练实例的数量，以及（2）统计效率，即每个处理的训练实例所取得的进展量。如图1a所示，可以通过增加batch size来增加系统吞吐量。较大的batch size可以提高更多资源的利用率（例如，较大数量的GPU）。但是，当batch size增加时，必须重新调整learning rate。否则，统计效率将会降低，使得总训练时间不会更短，从而浪费额外分配的GPU。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/1.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图1：Batch size、resource scalability、stage of training之间的trade-off（ResNet18 on CIFAR-10，为每一个batch size调整了learning rate）</div></center><br><p>本文提出了一种混合资源调度器Pollux，可以在为共享集群中的每个深度学习任务调整batch size和learning rate的同时自适应地分配资源。这篇工作由CMU和磐腾科技合作完成。</p><p>然而，调度器或许不应该任意调整用户指定的batch size，尤其是在调整超参数的任务中，这一行为是不被允许的。</p><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>DL训练任务有两种衡量指标：System Throughput和Statistical Efficiency。</p><p>System Throughput系统吞吐量可以定义为每单位时间处理的训练样本数。当一个DL任务分布在多个节点上时，其系统吞吐量由几个因素决定，包括（1）分配给该作业的资源的分配和放置，（2）分布式执行和同步的方法，以及（3）SGD算法使用的batch size大小。</p><p>Statistical Efficiency统计效率可以定义为每处理一单位数据所取得的训练进度。诸如batch size和learning rate等参数会影响这个数量。例如，当batch size增加时，效率将降低（降低的幅度取决于learning rate的相对比例）。</p><h2 id="DL训练的Goodput"><a href="#DL训练的Goodput" class="headerlink" title="DL训练的Goodput"></a>DL训练的Goodput</h2><p>本文定义了goodput：在第t个iteration的goodput为系统吞吐量和统计效率的乘积。</p><p>$$<br>GOODPUT_t(a,m) = THROUGHPUT(a,m) * EFFICIENCY_t(m)<br>$$</p><p>其中，$a \in R^N$是allocation vector，$a_n$是从节点n分配的GPU数量，$m$是batch size。</p><p>一个DL任务在使用batch size m ≥ m0时的统计效率是相对于用m0来说，每用m个训练样本所获得的训练进度。<br>This quantity can be framed in terms of the gradient noise scale φt .<br>统计效率可以被计算为：</p><p>$$<br>EFFICIENCY_t(m) = r_tm_0/m = (\phi_t+m_0)/(\phi_t+m)<br>$$</p>]]></content>
+      
+      
+      
+        <tags>
+            
+            <tag> 分布式训练 </tag>
+            
+            <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
+            
+            <tag> 弹性训练 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
       <title>AFS：分布式深度学习中的弹性资源共享</title>
       <link href="2021/04/13/AFS/"/>
       <url>2021/04/13/AFS/</url>
@@ -14,13 +39,13 @@
       
         <tags>
             
-            <tag> 分布式训练 </tag>
+            <tag> NSDI </tag>
             
             <tag> 集群调度 </tag>
             
-            <tag> 机器学习系统 </tag>
+            <tag> 分布式训练 </tag>
             
-            <tag> NSDI </tag>
+            <tag> 机器学习系统 </tag>
             
         </tags>
       
@@ -39,9 +64,9 @@
       
         <tags>
             
-            <tag> OSDI </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
             
             <tag> 深度学习编译器 </tag>
             
@@ -137,9 +162,9 @@
       
         <tags>
             
-            <tag> 分布式训练 </tag>
-            
             <tag> 集群调度 </tag>
+            
+            <tag> 分布式训练 </tag>
             
             <tag> 机器学习系统 </tag>
             
@@ -162,9 +187,9 @@
       
         <tags>
             
-            <tag> 分布式训练 </tag>
-            
             <tag> 集群调度 </tag>
+            
+            <tag> 分布式训练 </tag>
             
             <tag> 机器学习系统 </tag>
             
@@ -231,13 +256,13 @@
       
         <tags>
             
-            <tag> OSDI </tag>
+            <tag> 集群调度 </tag>
             
             <tag> 分布式训练 </tag>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
             
         </tags>
       
@@ -279,9 +304,9 @@
       
         <tags>
             
-            <tag> OSDI </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
             
             <tag> 上下文切换 </tag>
             
@@ -331,13 +356,13 @@
       
         <tags>
             
-            <tag> OSDI </tag>
+            <tag> 集群调度 </tag>
             
             <tag> 分布式训练 </tag>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> OSDI </tag>
             
         </tags>
       

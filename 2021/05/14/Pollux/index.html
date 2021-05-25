@@ -1,0 +1,263 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pollux：优化深度学习Goodput的自适应集群调度 | 论文与代码阅读笔记</title><meta name="keywords" content="分布式训练,机器学习系统,OSDI,弹性训练"><meta name="author" content="GDD"><meta name="copyright" content="GDD"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta http-equiv="Cache-Control" content="no-transform"><meta http-equiv="Cache-Control" content="no-siteapp"><meta name="description" content="本文是Gandiva的后续工作，提出了一个可以保证异构GPU集群中深度学习任务效率和用户间公平性的调度方法。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Pollux：优化深度学习Goodput的自适应集群调度">
+<meta property="og:url" content="https://diandiangu.github.io/2021/05/14/Pollux/index.html">
+<meta property="og:site_name" content="论文与代码阅读笔记">
+<meta property="og:description" content="本文是Gandiva的后续工作，提出了一个可以保证异构GPU集群中深度学习任务效率和用户间公平性的调度方法。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://diandiangu.github.io/img/Pollux/Pollux.png">
+<meta property="article:published_time" content="2021-05-14T11:15:28.000Z">
+<meta property="article:modified_time" content="2021-05-17T10:02:10.709Z">
+<meta property="article:author" content="GDD">
+<meta property="article:tag" content="分布式训练">
+<meta property="article:tag" content="机器学习系统">
+<meta property="article:tag" content="OSDI">
+<meta property="article:tag" content="弹性训练">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://diandiangu.github.io/img/Pollux/Pollux.png"><link rel="shortcut icon" href="/img/favicon.jpeg"><link rel="canonical" href="https://diandiangu.github.io/2021/05/14/Pollux/"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css"><script>var GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"search.xml","languages":{"hits_empty":"找不到您查询的内容：${query}"}},
+  translate: {"defaultEncoding":2,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"简"},
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  ClickShowText: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  justifiedGallery: {
+    js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+    css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+};
+
+var saveToLocal = {
+  set: function setWithExpiry(key, value, ttl) {
+    const now = new Date()
+    const expiryDay = ttl * 86400000
+    const item = {
+      value: value,
+      expiry: now.getTime() + expiryDay,
+    }
+    localStorage.setItem(key, JSON.stringify(item))
+  },
+
+  get: function getWithExpiry(key) {
+    const itemStr = localStorage.getItem(key)
+
+    if (!itemStr) {
+      return undefined
+    }
+    const item = JSON.parse(itemStr)
+    const now = new Date()
+
+    if (now.getTime() > item.expiry) {
+      localStorage.removeItem(key)
+      return undefined
+    }
+    return item.value
+  }
+}</script><script id="config_change">var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2021-05-17 18:02:10'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(function () {  window.activateDarkMode = function () {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+    }
+  }
+  window.activateLightMode = function () {
+    document.documentElement.setAttribute('data-theme', 'light')
+   if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+    }
+  }
+  const autoChangeMode = 'false'
+  const t = saveToLocal.get('theme')
+  if (autoChangeMode === '1') {
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+    const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+    const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+    if (t === undefined) {
+      if (isLightMode) activateLightMode()
+      else if (isDarkMode) activateDarkMode()
+      else if (isNotSpecified || hasNoSupport) {
+        const now = new Date()
+        const hour = now.getHours()
+        const isNight = hour <= 6 || hour >= 18
+        isNight ? activateDarkMode() : activateLightMode()
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+        if (saveToLocal.get('theme') === undefined) {
+          e.matches ? activateDarkMode() : activateLightMode()
+        }
+      })
+    } else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else if (autoChangeMode === '2') {
+    const now = new Date()
+    const hour = now.getHours()
+    const isNight = hour <= 6 || hour >= 18
+    if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+    else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else {
+    if (t === 'dark') activateDarkMode()
+    else if (t === 'light') activateLightMode()
+  }const asideStatus = saveToLocal.get('aside-status')
+if (asideStatus !== undefined) {
+   if (asideStatus === 'hide') {
+     document.documentElement.classList.add('hide-aside')
+   } else {
+     document.documentElement.classList.remove('hide-aside')
+   }
+}})()</script><meta name="generator" content="Hexo 5.2.0"><link rel="alternate" href="/atom.xml" title="论文与代码阅读笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="author-avatar"><img class="avatar-img" src="/img/favicon.jpeg" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">文章</div><div class="length-num">18</div></a></div></div><div class="data-item is-center"><div class="data-item-link"><a href="/tags/"><div class="headline">标签</div><div class="length-num">24</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div></div></div><div id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/Pollux/Pollux.png)"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">论文与代码阅读笔记</a></span><span id="menus"><div id="search_button"><a class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div><span class="close" id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></span></span></nav><div id="post-info"><h1 class="post-title">Pollux：优化深度学习Goodput的自适应集群调度</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2021-05-14T11:15:28.000Z" title="发表于 2021-05-14 19:15:28">2021-05-14</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2021-05-17T10:02:10.709Z" title="更新于 2021-05-17 18:02:10">2021-05-17</time></span></div><div class="meta-secondline"> </div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h1 id="Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning"><a href="#Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning" class="headerlink" title="Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning"></a>Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning</h1><p>现有的深度学习调度程序器要求提交作业的用户指定各种超参数，如果设置得不正确，这些参数会大大降低作业性能和资源效率。在这些参数中，batch size和learning rate非常依赖于其资源分配（GPU数量），这使得在共享资源环境中很难预先确定这些参数。此外，深度学习任务能否有效利用的资源分配不仅取决于所训练模型的结构，而且还取决于batch size和learning rate。资源数量、batch size、learning rate之间的这种相互依赖性，使得用户必须同时考虑到这些因素才能配置其作业以实现高效执行和资源利用。</p>
+<p>从根本上讲，一个有效配置的深度学习任务需要在两种期望之间取得trade off：（1）系统吞吐量，即每个单位时间处理的训练实例的数量，以及（2）统计效率，即每个处理的训练实例所取得的进展量。如图1a所示，可以通过增加batch size来增加系统吞吐量。较大的batch size可以提高更多资源的利用率（例如，较大数量的GPU）。但是，当batch size增加时，必须重新调整learning rate。否则，统计效率将会降低，使得总训练时间不会更短，从而浪费额外分配的GPU。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/Pollux/1.png" width="50%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图1：Batch size、resource scalability、stage of training之间的trade-off（ResNet18 on CIFAR-10，为每一个batch size调整了learning rate）</div>
+</center>
+
+<br>
+
+<p>本文提出了一种混合资源调度器Pollux，可以在为共享集群中的每个深度学习任务调整batch size和learning rate的同时自适应地分配资源。这篇工作由CMU和磐腾科技合作完成。</p>
+<p>然而，调度器或许不应该任意调整用户指定的batch size，尤其是在调整超参数的任务中，这一行为是不被允许的。</p>
+<h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>DL训练任务有两种衡量指标：System Throughput和Statistical Efficiency。</p>
+<p>System Throughput系统吞吐量可以定义为每单位时间处理的训练样本数。当一个DL任务分布在多个节点上时，其系统吞吐量由几个因素决定，包括（1）分配给该作业的资源的分配和放置，（2）分布式执行和同步的方法，以及（3）SGD算法使用的batch size大小。</p>
+<p>Statistical Efficiency统计效率可以定义为每处理一单位数据所取得的训练进度。诸如batch size和learning rate等参数会影响这个数量。例如，当batch size增加时，效率将降低（降低的幅度取决于learning rate的相对比例）。</p>
+<h2 id="DL训练的Goodput"><a href="#DL训练的Goodput" class="headerlink" title="DL训练的Goodput"></a>DL训练的Goodput</h2><p>本文定义了goodput：在第t个iteration的goodput为系统吞吐量和统计效率的乘积。</p>
+<p>$$<br>GOODPUT_t(a,m) = THROUGHPUT(a,m) * EFFICIENCY_t(m)<br>$$</p>
+<p>其中，$a \in R^N$是allocation vector，$a_n$是从节点n分配的GPU数量，$m$是batch size。</p>
+<p>一个DL任务在使用batch size m ≥ m0时的统计效率是相对于用m0来说，每用m个训练样本所获得的训练进度。<br>This quantity can be framed in terms of the gradient noise scale φt .<br>统计效率可以被计算为：</p>
+<p>$$<br>EFFICIENCY_t(m) = r_tm_0/m = (\phi_t+m_0)/(\phi_t+m)<br>$$</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">GDD</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://diandiangu.github.io/2021/05/14/Pollux/">https://diandiangu.github.io/2021/05/14/Pollux/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://diandiangu.github.io" target="_blank">论文与代码阅读笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/">分布式训练</a><a class="post-meta__tags" href="/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/">机器学习系统</a><a class="post-meta__tags" href="/tags/OSDI/">OSDI</a><a class="post-meta__tags" href="/tags/%E5%BC%B9%E6%80%A7%E8%AE%AD%E7%BB%83/">弹性训练</a></div><div class="post_share"><div class="social-share" data-image="/img/Pollux/Pollux.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="next-post pull-full"><a href="/2021/04/13/AFS/"><img class="next-cover" src="/img/AFS/3.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">AFS：分布式深度学习中的弹性资源共享</div></div></a></div></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span> 相关推荐</span></div><div class="relatedPosts-list"><div><a href="/2020/12/02/AntMan-0/" title="AntMan：面向深度学习的GPU集群动态弹性伸缩方法"><img class="cover" src="/img/antman/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-02</div><div class="title">AntMan：面向深度学习的GPU集群动态弹性伸缩方法</div></div></a></div><div><a href="/2021/03/07/Elan/" title="Elan: 面向深度学习的通用弹性训练"><img class="cover" src="/img/Elan/1.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-03-07</div><div class="title">Elan: 面向深度学习的通用弹性训练</div></div></a></div><div><a href="/2020/07/20/FlexFlow/" title="更多维度的深度神经网络并行策略"><img class="cover" src="/img/FlexFlow/3.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-07-20</div><div class="title">更多维度的深度神经网络并行策略</div></div></a></div><div><a href="/2020/12/22/HiveD/" title="HiveD：新的多租户GPU集群管理方案"><img class="cover" src="/img/HiveD/1.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-22</div><div class="title">HiveD：新的多租户GPU集群管理方案</div></div></a></div><div><a href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享"><img class="cover" src="/img/AFS/3.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-04-13</div><div class="title">AFS：分布式深度学习中的弹性资源共享</div></div></a></div><div><a href="/2020/12/07/BS/" title="ByteScheduler: 加速分布式训练的通信调度器"><img class="cover" src="/img/BS/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-07</div><div class="title">ByteScheduler: 加速分布式训练的通信调度器</div></div></a></div></div></div><hr/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div class="vcomment" id="vcomment"></div></div></div></div></div><div class="aside_content" id="aside_content"><div class="card-widget card-info"><div class="card-content"><div class="card-info-avatar is-center"><img class="avatar-img" src="/img/favicon.jpeg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/><div class="author-info__name">GDD</div><div class="author-info__description"></div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">18</div></a></div><div class="card-info-data-item is-center"><a href="/tags/"><div class="headline">标签</div><div class="length-num">24</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gudiandian"><i class="fab fa-github"></i><span>Follow Me on GitHub</span></a></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="card-content"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning"><span class="toc-number">1.</span> <span class="toc-text">Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%83%8C%E6%99%AF"><span class="toc-number">1.1.</span> <span class="toc-text">背景</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#DL%E8%AE%AD%E7%BB%83%E7%9A%84Goodput"><span class="toc-number">1.2.</span> <span class="toc-text">DL训练的Goodput</span></a></li></ol></li></ol></div></div></div><div class="card-widget card-recent-post"><div class="card-content"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2021/05/14/Pollux/" title="Pollux：优化深度学习Goodput的自适应集群调度"><img src="/img/Pollux/Pollux.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Pollux：优化深度学习Goodput的自适应集群调度"/></a><div class="content"><a class="title" href="/2021/05/14/Pollux/" title="Pollux：优化深度学习Goodput的自适应集群调度">Pollux：优化深度学习Goodput的自适应集群调度</a><time datetime="2021-05-14T11:15:28.000Z" title="发表于 2021-05-14 19:15:28">2021-05-14</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享"><img src="/img/AFS/3.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="AFS：分布式深度学习中的弹性资源共享"/></a><div class="content"><a class="title" href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享">AFS：分布式深度学习中的弹性资源共享</a><time datetime="2021-04-13T07:53:33.000Z" title="发表于 2021-04-13 15:53:33">2021-04-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/04/09/Rammer/" title="Rammer：如何通过全局视角编译深度学习计算"><img src="/img/Rammer/2.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Rammer：如何通过全局视角编译深度学习计算"/></a><div class="content"><a class="title" href="/2021/04/09/Rammer/" title="Rammer：如何通过全局视角编译深度学习计算">Rammer：如何通过全局视角编译深度学习计算</a><time datetime="2021-04-09T09:40:52.000Z" title="发表于 2021-04-09 17:40:52">2021-04-09</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/15/BytePS/" title="BytePS：加速异构集群中分布式训练的统一架构"><img src="/img/BytePS/2.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="BytePS：加速异构集群中分布式训练的统一架构"/></a><div class="content"><a class="title" href="/2021/03/15/BytePS/" title="BytePS：加速异构集群中分布式训练的统一架构">BytePS：加速异构集群中分布式训练的统一架构</a><time datetime="2021-03-15T10:12:33.000Z" title="发表于 2021-03-15 18:12:33">2021-03-15</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/03/08/DDP/" title="PyTorch Distributed：加速数据并行训练的经验"><img src="/img/DDP/0.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="PyTorch Distributed：加速数据并行训练的经验"/></a><div class="content"><a class="title" href="/2021/03/08/DDP/" title="PyTorch Distributed：加速数据并行训练的经验">PyTorch Distributed：加速数据并行训练的经验</a><time datetime="2021-03-08T06:08:00.000Z" title="发表于 2021-03-08 14:08:00">2021-03-08</time></div></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2021 By GDD</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="translateLink" type="button" title="简繁转换">简</button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="直达评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></div><div id="local-search"><div class="search-dialog"><div class="search-dialog__title" id="local-search-title">本地搜索</div><div id="local-input-panel"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div></div><hr/><div id="local-search-results"><div id="local-hits"></div><div id="local-stats"><div class="local-search-stats__hr" id="hr"><span>由</span> <a target="_blank" rel="noopener" href="https://github.com/wzpan/hexo-generator-search" style="color:#49B1F5;">hexo-generator-search</a>
+ <span>提供支持</span></div></div></div><span class="search-close-button"><i class="fas fa-times"></i></span></div><div id="search-mask"></div></div><div><script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="/js/tw_cn.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js"></script><script src="/js/search/local-search.js"></script><div class="js-pjax"><script>if (!window.MathJax) {
+  window.MathJax = {
+    loader: {
+      source: {
+        '[tex]/amsCd': '[tex]/amscd'
+      }
+    },
+    tex: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"]],
+      tags: 'ams'
+    },
+    options: {
+      renderActions: {
+        findScript: [10, doc => {
+          for (const node of document.querySelectorAll('script[type^="math/tex"]')) {
+            const display = !!node.type.match(/; *mode=display/)
+            const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display)
+            const text = document.createTextNode('')
+            node.parentNode.replaceChild(text, node)
+            math.start = {node: text, delim: '', n: 0}
+            math.end = {node: text, delim: '', n: 0}
+            doc.math.push(math)
+          }
+        }, ''],
+        addClass: [200,() => {
+          document.querySelectorAll('mjx-container:not([display=\'true\']').forEach( node => {
+            const target = node.parentNode
+            if (!target.classList.contains('has-jax')) {
+              target.classList.add('mathjax-overflow')
+            }
+          })
+        }, '', false]
+      }
+    }
+  }
+  
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'
+  script.id = 'MathJax-script'
+  script.async = true
+  document.head.appendChild(script)
+} else {
+  MathJax.startup.document.state(0)
+  MathJax.texReset()
+  MathJax.typeset()
+}</script><script>function loadValine () {
+  function initValine () {
+    let initData = {
+      el: '#vcomment',
+      appId: '',
+      appKey: '',
+      placeholder: 'Please leave your footprints',
+      avatar: 'monsterid',
+      meta: 'nick,mail,link'.split(','),
+      pageSize: '10',
+      lang: 'zh-CN',
+      recordIP: false,
+      serverURLs: '',
+      emojiCDN: '',
+      emojiMaps: "",
+      enableQQ: false,
+      path: window.location.pathname,
+    }
+
+    if (true) { 
+      initData.requiredFields= ('nick,mail'.split(','))
+    }
+    
+    if (false) {
+      const otherData = false
+      initData = Object.assign({}, initData, otherData)
+    }
+    
+    const valine = new Valine(initData)
+  }
+
+  if (typeof Valine === 'function') initValine() 
+  else $.getScript('https://cdn.jsdelivr.net/npm/valine/dist/Valine.min.js', initValine)
+}
+
+if ('Valine' === 'Valine' || !true) {
+  if (true) btf.loadComment(document.querySelector('#vcomment'),loadValine)
+  else setTimeout(() => loadValine(), 0)
+} else {
+  function loadOtherComment () {
+    loadValine()
+  }
+}</script></div></div></body></html>
