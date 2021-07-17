@@ -4,21 +4,23 @@
   
     
     <entry>
-      <title>Pollux：优化深度学习Goodput的自适应集群调度</title>
+      <title>Pollux：面向深度学习有效吞吐量优化的协同适应集群调度</title>
       <link href="2021/05/14/Pollux/"/>
       <url>2021/05/14/Pollux/</url>
       
-        <content type="html"><![CDATA[<h1 id="Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning"><a href="#Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning" class="headerlink" title="Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning"></a>Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning</h1><p>现有的深度学习调度程序器要求提交作业的用户指定各种超参数，如果设置得不正确，这些参数会大大降低作业性能和资源效率。在这些参数中，batch size和learning rate非常依赖于其资源分配（GPU数量），这使得在共享资源环境中很难预先确定这些参数。此外，深度学习任务能否有效利用的资源分配不仅取决于所训练模型的结构，而且还取决于batch size和learning rate。资源数量、batch size、learning rate之间的这种相互依赖性，使得用户必须同时考虑到这些因素才能配置其作业以实现高效执行和资源利用。</p><p>从根本上讲，一个有效配置的深度学习任务需要在两种期望之间取得trade off：（1）系统吞吐量，即每个单位时间处理的训练实例的数量，以及（2）统计效率，即每个处理的训练实例所取得的进展量。如图1a所示，可以通过增加batch size来增加系统吞吐量。较大的batch size可以提高更多资源的利用率（例如，较大数量的GPU）。但是，当batch size增加时，必须重新调整learning rate。否则，统计效率将会降低，使得总训练时间不会更短，从而浪费额外分配的GPU。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/1.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图1：Batch size、resource scalability、stage of training之间的trade-off（ResNet18 on CIFAR-10，为每一个batch size调整了learning rate）</div></center><br><p>本文提出了一种混合资源调度器Pollux，可以在为共享集群中的每个深度学习任务调整batch size和learning rate的同时自适应地分配资源。这篇工作由CMU和磐腾科技合作完成。</p><p>然而，调度器或许不应该任意调整用户指定的batch size，尤其是在调整超参数的任务中，这一行为是不被允许的。</p><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>DL训练任务有两种衡量指标：System Throughput和Statistical Efficiency。</p><p>System Throughput系统吞吐量可以定义为每单位时间处理的训练样本数。当一个DL任务分布在多个节点上时，其系统吞吐量由几个因素决定，包括（1）分配给该作业的资源的分配和放置，（2）分布式执行和同步的方法，以及（3）SGD算法使用的batch size大小。</p><p>Statistical Efficiency统计效率可以定义为每处理一单位数据所取得的训练进度。诸如batch size和learning rate等参数会影响这个数量。例如，当batch size增加时，效率将降低（降低的幅度取决于learning rate的相对比例）。</p><h2 id="DL训练的Goodput"><a href="#DL训练的Goodput" class="headerlink" title="DL训练的Goodput"></a>DL训练的Goodput</h2><p>本文定义了goodput：在第t个iteration的goodput为系统吞吐量和统计效率的乘积。</p><p>$$<br>GOODPUT_t(a,m) = THROUGHPUT(a,m) * EFFICIENCY_t(m)<br>$$</p><p>其中，$a \in R^N$是allocation vector，$a_n$是从节点n分配的GPU数量，$m$是batch size。</p><p>一个DL任务在使用batch size m ≥ m0时的统计效率是相对于用m0来说，每用m个训练样本所获得的训练进度。<br>This quantity can be framed in terms of the gradient noise scale φt .<br>统计效率可以被计算为：</p><p>$$<br>EFFICIENCY_t(m) = r_tm_0/m = (\phi_t+m_0)/(\phi_t+m)<br>$$</p><h1 id="Pollux架构与设计"><a href="#Pollux架构与设计" class="headerlink" title="Pollux架构与设计"></a>Pollux架构与设计</h1><ol><li>PolluxAgent调整batch size和learning rate</li><li>PolluxSched优化资源分配</li></ol><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/Pollux.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图2：Pollux的Co-adaptive scheduling架构</div></center><br><hr><p><strong>原文作者：</strong>Aurick Qiao, Sang Keun Choe, Suhas Jayaram Subramanya, Willie Neiswanger, Qirong Ho, Hao Zhang, Gregory R. Ganger, Eric P. Xing<br><strong>原文链接：</strong><a href="https://arxiv.org/pdf/2008.12260.pdf">https://arxiv.org/pdf/2008.12260.pdf</a><br><strong>项目代码：</strong><a href="https://github.com/petuum/adaptdl">https://github.com/petuum/adaptdl</a></p>]]></content>
+        <content type="html"><![CDATA[<h1 id="Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning"><a href="#Pollux-Co-adaptive-Cluster-Scheduling-for-Goodput-Optimized-Deep-Learning" class="headerlink" title="Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning"></a>Pollux: Co-adaptive Cluster Scheduling for Goodput-Optimized Deep Learning</h1><p>现有的深度学习调度程序器要求提交作业的用户指定各种超参数，如果设置得不正确，这些参数会大大降低作业性能和资源效率。在这些参数中，batch size和learning rate非常依赖于其资源分配（GPU数量），这使得在共享资源环境中很难预先确定这些参数。此外，深度学习任务能否有效利用的资源分配不仅取决于所训练模型的结构，而且还取决于batch size和learning rate。资源数量、batch size、learning rate之间的这种相互依赖性，使得用户必须同时考虑到这些因素才能配置其作业以实现高效执行和资源利用。</p><p>从根本上讲，一个有效配置的深度学习任务需要在两种期望之间取得trade off：（1）系统吞吐量，即每个单位时间处理的训练实例的数量，以及（2）统计效率，即每个处理的训练实例所取得的进展量。如图1a所示，可以通过增加batch size来增加系统吞吐量。较大的batch size可以提高更多资源的利用率（例如，较大数量的GPU）。但是，当batch size增加时，必须重新调整learning rate。否则，统计效率将会降低，使得总训练时间不会更短，从而浪费额外分配的GPU。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/1.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图1：Batch size、resource scalability、stage of training之间的trade-off（ResNet18 on CIFAR-10，为每一个batch size调整了learning rate）</div></center><br><p>本文提出了一种混合资源调度器Pollux，可以在为共享集群中的每个深度学习任务调整batch size和learning rate的同时协同适应地分配资源。这篇工作由CMU和磐腾科技合作完成，获得OSDI’21会议的best paper。</p><p>然而，调度器或许不应该任意调整用户指定的batch size，尤其是在调整超参数的任务中，这一行为是不被允许的。</p><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>深度训练任务有两种衡量指标：System Throughput和Statistical Efficiency。<br>系统吞吐量（System Throughput）是每单位时间处理的训练样本数。当一个DL任务分布在多个节点上时，其系统吞吐量由几个因素决定，包括（1）分配给该作业的资源的分配和放置，（2）分布式执行和同步的方法，以及（3）SGD算法使用的batch size大小。由于深度学习任务的scalibility是次线性的（sublinear），使用太多数量的GPU不一定会提升系统吞吐量。通常我们可以使用更大的batch size来提升系统的吞吐量。</p><p>然而，我们也不能一味地增加batch size，因为在增大batch size的同时，统计效率（Statistical Efficiency）会下降。统计效率是每处理一单位数据所取得的训练进度，当统计效率下降时，训练所需要的epoch数量会增加。最佳的训练效果需要在系统吞吐量和统计效率之间权衡。</p><h2 id="DL训练的Goodput"><a href="#DL训练的Goodput" class="headerlink" title="DL训练的Goodput"></a>DL训练的Goodput</h2><p>本文定义了goodput：在第t个iteration的goodput为系统吞吐量和统计效率的乘积。</p><p>$$<br>GOODPUT_t(a,m) = THROUGHPUT(a,m) * EFFICIENCY_t(m)<br>$$</p><p>其中，$a \in R^N$是allocation vector，$a_n$是从节点n分配的GPU数量，$m$是batch size。</p><p>一个DL任务在使用batch size m ≥ m0时的统计效率是相对于用m0来说，每用m个训练样本所获得的训练进度。<br>This quantity can be framed in terms of the gradient noise scale φt .<br>统计效率可以被计算为：</p><p>$$<br>EFFICIENCY_t(m) = r_tm_0/m = (\phi_t+m_0)/(\phi_t+m)<br>$$</p><h1 id="Pollux架构与设计"><a href="#Pollux架构与设计" class="headerlink" title="Pollux架构与设计"></a>Pollux架构与设计</h1><ol><li>PolluxAgent对每个任务所给定的GPU资源分配结果，找到能够最大化有效吞吐量的batch size和梯度累积步数。Pollux使用用户指定的learning rate调整规则来根据batch size调整learning rate。</li><li>PolluxSched根据集群中每个任务的有效吞吐量，为每一个任务找到合适的GPU资源分配方案。</li></ol><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/Pollux.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图2：Pollux的Co-adaptive scheduling架构</div></center><br><h1 id="实验评估"><a href="#实验评估" class="headerlink" title="实验评估"></a>实验评估</h1><p>作者在16个节点、没个节点有四块NVIDIA T4 GPU的集群上进行了实验评估，使用的job trace包含微软公开的Philly集群job trace中最繁忙的8个小时内的160个job。Pollux可以将训练所需时间缩短37-50%。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/2.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">表1：实验结果总结</div></center><br><p>通过图3中（A）处可以看出，在集群中的资源较紧张的时候，Pollux会使用更大的batch size以提升系统吞吐量，此时统计效率较低。在此之后，通过（B）可以看出，Pollux会给任务减少GPU资源的分配，使用较小的batch size，从而提升统计效率。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Pollux/3.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图3：ImageNet训练任务中Pollux与baseline的实验结果比较</div></center><br><p>除了集群调度之外，Pollux还可以应用于云端弹性训练、超参数搜索等场景。</p><h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>Pollux通过优化Goodput，协同调整集群和任务的参数。Pollux 基于对有用作业完成进度提出更有意义的衡量指标，来提升深度学习作业竞争资源的公平性，并揭示了在云环境下降低深度学习成本具有新机会。</p><hr><p><strong>原文作者：</strong>Aurick Qiao, Sang Keun Choe, Suhas Jayaram Subramanya, Willie Neiswanger, Qirong Ho, Hao Zhang, Gregory R. Ganger, Eric P. Xing<br><strong>原文链接：</strong><a href="https://arxiv.org/pdf/2008.12260v2.pdf">https://arxiv.org/pdf/2008.12260v2.pdf</a><br><strong>项目代码：</strong><a href="https://github.com/petuum/adaptdl">https://github.com/petuum/adaptdl</a><br><strong>参考文献：</strong>[1] 计算机系统软件顶会OSDI 2021最佳论文出炉，邢波团队研究入选, <a href="https://zhuanlan.zhihu.com/p/390040932">https://zhuanlan.zhihu.com/p/390040932</a></p>]]></content>
       
       
       
         <tags>
             
+            <tag> OSDI </tag>
+            
             <tag> 分布式训练 </tag>
             
-            <tag> 机器学习系统 </tag>
+            <tag> 集群调度 </tag>
             
-            <tag> OSDI </tag>
+            <tag> 机器学习系统 </tag>
             
             <tag> 弹性训练 </tag>
             
@@ -39,13 +41,13 @@
       
         <tags>
             
-            <tag> NSDI </tag>
+            <tag> 分布式训练 </tag>
             
             <tag> 集群调度 </tag>
             
-            <tag> 分布式训练 </tag>
-            
             <tag> 机器学习系统 </tag>
+            
+            <tag> NSDI </tag>
             
         </tags>
       
@@ -64,9 +66,9 @@
       
         <tags>
             
-            <tag> 机器学习系统 </tag>
-            
             <tag> OSDI </tag>
+            
+            <tag> 机器学习系统 </tag>
             
             <tag> 深度学习编译器 </tag>
             
@@ -91,11 +93,11 @@
             
             <tag> 机器学习系统 </tag>
             
+            <tag> 深度学习框架 </tag>
+            
             <tag> SOSP </tag>
             
             <tag> 通信调度 </tag>
-            
-            <tag> 深度学习框架 </tag>
             
         </tags>
       
@@ -162,9 +164,9 @@
       
         <tags>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 分布式训练 </tag>
+            
+            <tag> 集群调度 </tag>
             
             <tag> 机器学习系统 </tag>
             
@@ -181,15 +183,15 @@
       <link href="2021/03/02/MLsystem/"/>
       <url>2021/03/02/MLsystem/</url>
       
-        <content type="html"><![CDATA[<h1 id="Meta-Papers"><a href="#Meta-Papers" class="headerlink" title="Meta Papers"></a>Meta Papers</h1><ul><li><input checked="" disabled="" type="checkbox"> <strong>Low-level Advice for Systems Research</strong> [<a href="https://lalith.in/2020/09/27/Low-Level-Advice-For-Systems-Research/">Original Link</a>]</li><li><input checked="" disabled="" type="checkbox"> <strong>A Berkeley View of Systems Challenges for AI</strong> [<a href="https://arxiv.org/pdf/1712.05855.pdf">PDF</a>]</li><li><input checked="" disabled="" type="checkbox"> <strong>MLSys: The New Frontier of Machine Learning Systems</strong> [<a href="https://arxiv.org/pdf/1904.03257.pdf">PDF</a>]</li><li><a href="https://diandiangu.github.io/2020/12/25/survey/"><strong>综述类文章汇总</strong></a></li></ul><h1 id="课程资源"><a href="#课程资源" class="headerlink" title="课程资源"></a>课程资源</h1><ul><li><strong>MSRA</strong> <a href="https://github.com/microsoft/ai-edu">微软人工智能教育与学习共建社区</a> <a href="https://github.com/microsoft/AI-System">人工智能系统</a>（中文）</li><li><strong>陈天奇</strong> <a href="http://dlsys-course.github.io/">CSE 599W: System for ML</a>（经典）</li><li><strong>UC Berkley</strong> <a href="https://ucbrise.github.io/cs294-ai-sys-sp19/">CS294: AI For Systems and Systems For AI</a> [<a href="https://github.com/ucbrise/cs294-ai-sys-sp19">GitHub</a>]</li><li><strong>Michigan</strong> <a href="https://github.com/mosharaf/eecs598">EECS 598: System for AL (W’21)</a></li></ul><h1 id="Reading-List"><a href="#Reading-List" class="headerlink" title="Reading List"></a>Reading List</h1><ul><li><a href="https://diandiangu.github.io/frameworks/">分布式训练框架</a></li><li><a href="https://diandiangu.github.io/training/">训练优化</a></li><li><a href="https://diandiangu.github.io/scheduling/">集群调度</a></li><li><a href="https://diandiangu.github.io/elasticity/">弹性训练</a></li><li><a href="https://diandiangu.github.io/others/">其他</a></li></ul>]]></content>
+        <content type="html"><![CDATA[<h1 id="Meta-Papers"><a href="#Meta-Papers" class="headerlink" title="Meta Papers"></a>Meta Papers</h1><ul><li><input checked="" disabled="" type="checkbox"> <strong>Low-level Advice for Systems Research</strong> [<a href="https://lalith.in/2020/09/27/Low-Level-Advice-For-Systems-Research/">Original Link</a>]</li><li><input checked="" disabled="" type="checkbox"> <strong>A Berkeley View of Systems Challenges for AI</strong> [<a href="https://arxiv.org/pdf/1712.05855.pdf">PDF</a>]</li><li><input checked="" disabled="" type="checkbox"> <strong>MLSys: The New Frontier of Machine Learning Systems</strong> [<a href="https://arxiv.org/pdf/1904.03257.pdf">PDF</a>]</li><li><a href="https://diandiangu.github.io/2020/12/25/survey/"><strong>综述类文章汇总</strong></a></li></ul><h1 id="课程资源"><a href="#课程资源" class="headerlink" title="课程资源"></a>课程资源</h1><ul><li><strong>MSRA</strong> <a href="https://github.com/microsoft/ai-edu">微软人工智能教育与学习共建社区</a> <a href="https://github.com/microsoft/AI-System">人工智能系统</a>（中文）</li><li><strong>陈天奇</strong> <a href="http://dlsys-course.github.io/">CSE 599W: System for ML</a>（经典）</li><li><strong>UC Berkley</strong> <a href="https://ucbrise.github.io/cs294-ai-sys-sp19/">CS294: AI For Systems and Systems For AI</a> [<a href="https://github.com/ucbrise/cs294-ai-sys-sp19">GitHub</a>]</li><li><strong>Michigan</strong> <a href="https://github.com/mosharaf/eecs598">EECS 598: System for AL (W’21)</a></li></ul><h1 id="Reading-List"><a href="#Reading-List" class="headerlink" title="Reading List"></a>Reading List</h1><ul><li><a href="https://diandiangu.github.io/frameworks/">分布式训练框架</a></li><li><a href="https://diandiangu.github.io/training/">训练优化</a></li><li><a href="https://diandiangu.github.io/scheduling/">集群调度</a></li><li><a href="https://diandiangu.github.io/sharing/">GPU资源利用</a></li><li><a href="https://diandiangu.github.io/elasticity/">弹性训练</a></li><li><a href="https://diandiangu.github.io/others/">其他</a></li></ul>]]></content>
       
       
       
         <tags>
             
-            <tag> 集群调度 </tag>
-            
             <tag> 分布式训练 </tag>
+            
+            <tag> 集群调度 </tag>
             
             <tag> 机器学习系统 </tag>
             
@@ -256,13 +258,13 @@
       
         <tags>
             
-            <tag> 集群调度 </tag>
+            <tag> OSDI </tag>
             
             <tag> 分布式训练 </tag>
             
-            <tag> 机器学习系统 </tag>
+            <tag> 集群调度 </tag>
             
-            <tag> OSDI </tag>
+            <tag> 机器学习系统 </tag>
             
         </tags>
       
@@ -304,9 +306,9 @@
       
         <tags>
             
-            <tag> 机器学习系统 </tag>
-            
             <tag> OSDI </tag>
+            
+            <tag> 机器学习系统 </tag>
             
             <tag> 上下文切换 </tag>
             
@@ -333,11 +335,11 @@
             
             <tag> 机器学习系统 </tag>
             
+            <tag> 深度学习框架 </tag>
+            
             <tag> SOSP </tag>
             
             <tag> 通信调度 </tag>
-            
-            <tag> 深度学习框架 </tag>
             
         </tags>
       
@@ -356,13 +358,13 @@
       
         <tags>
             
-            <tag> 集群调度 </tag>
+            <tag> OSDI </tag>
             
             <tag> 分布式训练 </tag>
             
-            <tag> 机器学习系统 </tag>
+            <tag> 集群调度 </tag>
             
-            <tag> OSDI </tag>
+            <tag> 机器学习系统 </tag>
             
         </tags>
       
