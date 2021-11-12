@@ -6,7 +6,7 @@
   <link href="https://diandiangu.github.io/atom.xml" rel="self"/>
   
   <link href="https://diandiangu.github.io/"/>
-  <updated>2021-07-17T07:51:43.339Z</updated>
+  <updated>2021-11-12T17:07:20.626Z</updated>
   <id>https://diandiangu.github.io/</id>
   
   <author>
@@ -15,6 +15,29 @@
   </author>
   
   <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Blink：面向分布式机器学习的快速、通用的通信原语</title>
+    <link href="https://diandiangu.github.io/2021/09/19/Blink/"/>
+    <id>https://diandiangu.github.io/2021/09/19/Blink/</id>
+    <published>2021-09-19T12:53:53.000Z</published>
+    <updated>2021-11-12T17:07:20.626Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="动机"><a href="#动机" class="headerlink" title="动机"></a>动机</h2><p>目前用于深度学习的数据集规模越来越大，在训练效果得到提升的同时，与之同时，漫长的训练时间却成为了另一个让人头疼的问题。基于多个 GPU 的数据并行训练（Data-Parallel Training）大大缓解了大规模深度学习模型训练耗时长的问题，但是数据并行需要同步模型参数，跨 GPU 的参数同步在大规模训练时产生了较大开销，这一开销成为了限制训练速度的瓶颈。</p><p>为了缓解通信上的这一瓶颈，这几年在软件和硬件上都有很大的提升。在硬件方面，NVIDIA提供了多种先进的服务器，例如DGX-1、DGX-2等。在这些服务器中，有GPU用于计算的P100或者V100，有用于通信的PCIe和NCLink。在软件层面，很多公司提供了自己的通信库，例如NVIDIA的NCCL，Facebook的gloo，还有Uber的Horovod。</p><p>作者发现，即使使用了当前很先进的的硬件，通信开销仍然很高。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Blink/1.png" width="60%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图1：不同服务器上通信开销占训练时间的比例</div></center><br><p>而且，随着GPU的计算能力的增强，通信开销的带来的影响会越来越大。因此，作者认为，在现有的硬件条件下，我们需要可以更快进行通信的protocol。</p><p>为了减少通信开销，作者设计了Blink这一集合通信库。</p><h2 id="挑战"><a href="#挑战" class="headerlink" title="挑战"></a>挑战</h2><ol><li>Different server configuration。图2中有两种DGX-1服务器link的拓扑和带宽不同。 目前的通信库通常会忽略这个问题，从而导致很多的link不能被高效利用。<center> <img style="border-radius: 0.3125em; box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"  src="/img/Blink/2.png" width="60%"> <div style="color:orange; border-bottom: 1px solid #d9d9d9; display: inline-block; color: #999; padding: 2px;">图2：两种DGX-1服务器的拓扑结构</div></center></li></ol><br><ol start="2"><li><p>Link heterogeneoty。SOTA通信库的通信原语都是基于“环”结构的。那么什么是基于“环”的原语呢？以broadcast为例，左边有四块GPU，他们通过环形的拓扑连接起来。（broadcast的过程）而一个server中会有多种不同种类的link。（PPT图有pcie和nvlink）如果使用这种基于“环”结构的通信原语的话，他只能利用同种类型的link。如果使用了不同类型的link，通信过程中的bottleneck在于这个ring中bandwidth最小的那一个link（例如，pcie bottleneck）。</p></li><li><p>Fragmentation in multi-tenant clusters。 在多租户的集群中，由调度器把GPU分配给不同的job。有时候一个机器里会有多个job，这几个job之间有可能会共用PCIe或者某种link，从而互相影响。<br>在从微软收集到的的40,000多个job的trace中，可以看到，即使用户一般都会申请试用2的n次方块GPU，但是，在每个server中分配的GPU数量可能是3，5，6，7这种数字。比如一个使用8块GPU的job如果被分在2个server上，可能是2+6或者3+5这种数字的组合。为什么会有这种碎片化的问题呢？因为集群的调度器不是topology-aware的。目前还没有通用的、高效进行migration的方法，为了避免过长的queuing delay，这些DNN的任务必须面对碎片化的问题。在这种情况下，会有一些GPU的分配中，同一个job使用的GPU没法直接形成“环”（ppt图）。在NCCL中如果遇到这种情况，会使放弃使用贷款更高的NVLink，而去使用PCIe。</p></li></ol><h3 id="Workflow"><a href="#Workflow" class="headerlink" title="Workflow"></a>Workflow</h3><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/Blink/3.png" width="75%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图3：Blink Workflow</div></center><br>（1）给定深度学习任务，一旦安排并分配了一组 GPU，Blink 就能够探测机器的拓扑结构，并通过分配的 GPU 推断互连拓扑结构。<p>（2）给定拓扑，将集体通信操作建模为有向图上的流，并计算生成树的最大分数填充（TreeGen）此步骤输出一组生成树和对应于应通过它们发送多少数据的权重。</p><p>（3）CodeGen 解析生成树并生成 CUDA 代码。生成的代码与 NCCL 提供的 API 匹配，并打包到共享库 libblink.so 中。</p><p>（4）设置 LD_PRELOAD 标志，以便在调用主程序时动态加载 Blink 实现。这确保了现有程序可以在没有任何修改的情况下运行。</p><h2 id="系统设计"><a href="#系统设计" class="headerlink" title="系统设计"></a>系统设计</h2><h3 id="TreeGen"><a href="#TreeGen" class="headerlink" title="TreeGen"></a>TreeGen</h3><h4 id="packing-max-spanning-trees"><a href="#packing-max-spanning-trees" class="headerlink" title="packing max. spanning trees"></a>packing max. spanning trees</h4><p>将从分配的资源推断出的拓扑建模为一个有向图，其中每个 GPU 是顶点 V，每个链路（NVLink 或 PCIe）标记为有向边缘 E。每个有向边缘还具有带宽比例容量。通过找到图中的有向生成树或树状图的最大填充可以达到最优速率。每个树状图 Ti 从根涡生成，沿着有向链接扩展到其它涡点。通过确定满足能力限制的最大权重树状图，可以解决在广播中确定最佳时间表的问题。</p><p>由上式，给定一个图 G，顶点为 V，边为 E，根为 r，生成树为 T1, T2, T3, … Ti，希望找到权重 w_i，使得通过任何边的权重树的总和不超过特定边的容量。</p><p>如何生成这些树？MWU算法+一个新提出的算法[5]，接近线性时间。</p><p>这样做的问题是，最优解种可能包含了太多的树。而且每个树中需要传输的数据量太小了，不能充分利用每一个link的带宽。</p><p>为了解决这个问题，新增一个限制条件：对于每一个link，要么不用这个link，要么把这个link的带宽用满。（181-&gt;6）</p><h4 id="推广到多对多的情况"><a href="#推广到多对多的情况" class="headerlink" title="推广到多对多的情况"></a>推广到多对多的情况</h4><p>为了处理多对多的操作，作者利用了这样一个事实：在这些机器中发现的所有链接本质上都是双向的，因此可以创建一个无向图，用链接的一个方向运行多对一原语，并相应地在另一个方向运行一对多原语。allreduce = reduce+broadcast<br>(这种使用两个无向树的策略也与 AllReduce 操作所需的消息数下限相匹配。</p><p>AllReduce 的进程需要发送的最小消息数是 2x|(N-1)/N|。N 个顶点上的生成树包含 N-1 条边，并考虑了两个方向上的树（一个用于 Reduce，一个用于 Broadcast），类似的，本文方法同样有 2x(N-1）条消息。)</p><h3 id="CodeGen-implementation"><a href="#CodeGen-implementation" class="headerlink" title="CodeGen(implementation)"></a>CodeGen(implementation)</h3><p>通过pipeline减小数据传输的延迟。并通过前几个iter的profile选取合适的chunck size。</p><h2 id="实验评估"><a href="#实验评估" class="headerlink" title="实验评估"></a>实验评估</h2><p>在实验评估环节，作者将Blink与目前最先进的、基于环的集体通信协议（如 NCCL2）相比较。实验结果表明，Blink 可以实现高达8倍的模型同步速度，并将端到端DNN模型训练时间减少 40%。</p><hr><p><strong>原文作者：</strong>Guanhua Wang, Shivaram Venkataraman, Amar Phanishayee, Jorgen Thelin, Nikhil R. Devanur, Ion Stoica<br><strong>原文链接：</strong><a href="https://arxiv.org/pdf/1910.04940.pdf">https://arxiv.org/pdf/1910.04940.pdf</a><br><strong>参考文献：</strong><br>[1] MLSys提前看 | 机器学习的分布式优化方法, <a href="https://zhuanlan.zhihu.com/p/108289809">https://zhuanlan.zhihu.com/p/108289809</a></p>]]></content>
+    
+    
+    <summary type="html">本文发表于MLSys 2020。目前用于深度学习的数据集规模越来越大，基于多个 GPU 的数据并行训练（Data-Parallel Training）大大缓解了大规模深度学习模型训练耗时长的问题，但是跨 GPU 的参数同步在大规模训练时产生了较大开销。本文提出了 Blink——一个通过包装生成树动态生成最佳通信原语的集合通信库。在处理硬件生成中的拓扑异质性问题或集群调度程序中的分配问题时，Blink 能够动态生成给定拓扑的最佳通信原语。</summary>
+    
+    
+    
+    
+    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
+    
+    <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="MLSys" scheme="https://diandiangu.github.io/tags/MLSys/"/>
+    
+  </entry>
   
   <entry>
     <title>Pollux：面向深度学习有效吞吐量优化的协同适应集群调度</title>
@@ -31,13 +54,13 @@
     
     
     
-    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
+    <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
     
     <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
     
-    <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
-    
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
     
     <category term="弹性训练" scheme="https://diandiangu.github.io/tags/%E5%BC%B9%E6%80%A7%E8%AE%AD%E7%BB%83/"/>
     
@@ -58,13 +81,13 @@
     
     
     
-    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
+    <category term="NSDI" scheme="https://diandiangu.github.io/tags/NSDI/"/>
     
     <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
     
-    <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
     
-    <category term="NSDI" scheme="https://diandiangu.github.io/tags/NSDI/"/>
+    <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
     
   </entry>
   
@@ -83,9 +106,9 @@
     
     
     
-    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
-    
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
     
     <category term="深度学习编译器" scheme="https://diandiangu.github.io/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E7%BC%96%E8%AF%91%E5%99%A8/"/>
     
@@ -110,11 +133,11 @@
     
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
     
-    <category term="深度学习框架" scheme="https://diandiangu.github.io/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%A1%86%E6%9E%B6/"/>
-    
     <category term="SOSP" scheme="https://diandiangu.github.io/tags/SOSP/"/>
     
     <category term="通信调度" scheme="https://diandiangu.github.io/tags/%E9%80%9A%E4%BF%A1%E8%B0%83%E5%BA%A6/"/>
+    
+    <category term="深度学习框架" scheme="https://diandiangu.github.io/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%A1%86%E6%9E%B6/"/>
     
   </entry>
   
@@ -181,9 +204,9 @@
     
     
     
-    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
-    
     <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
+    
+    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
     
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
     
@@ -206,9 +229,9 @@
     
     
     
-    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
-    
     <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
+    
+    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
     
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
     
@@ -242,9 +265,9 @@
     <link href="https://diandiangu.github.io/2020/12/25/empirical/"/>
     <id>https://diandiangu.github.io/2020/12/25/empirical/</id>
     <published>2020-12-25T02:38:22.000Z</published>
-    <updated>2021-04-09T08:19:26.278Z</updated>
+    <updated>2021-09-20T11:33:54.427Z</updated>
     
-    <content type="html"><![CDATA[<h2 id="深度学习领域的Empirical-Study"><a href="#深度学习领域的Empirical-Study" class="headerlink" title="深度学习领域的Empirical Study"></a>深度学习领域的Empirical Study</h2><ul><li><p><strong>An Empirical Study on TensorFlow Program Bugs</strong> (ISSTA’18) [<a href="http://sccpu2.cse.ust.hk/castle/materials/issta18main-p98-p.pdf#:~:text=An%20Empirical%20Study%20on%20TensorFlow%20Program%20Bugs%20ISSTA'18%2C,further%20divided%20into%20two%20sub-phases%3A%20training%20and%20testing.">PDF</a>]</p><p>  <strong>内容：</strong>探究使用TensorFlow框架的程序中bug产生的原因、检测bug的挑战、用户如何应对检测bug的挑战、定位bug的挑战、用户如何应对定位bug的挑战。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li><li><p><strong>A Comprehensive Study on Deep Learning Bug Characteristics</strong> (ESEC/FSE’19)[<a href="https://dl.acm.org/doi/pdf/10.1145/3338906.3338955">PDF</a>]</p><p>  <strong>内容：</strong>探究使用5种流行的深度学习框架会遇到的bug类型、根本原因、产生的影响、Bug出现的阶段、共性以及bug的演变。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li><li><p><strong>An Empirical Study on Program Failures of Deep Learning Jobs</strong> (ICSE’20 <strong>Distinguished Paper Award</strong>) [<a href="https://wencongxiao.github.io/res/icse20/icse20-main-199.pdf">PDF</a>]</p><p>  <strong>内容：</strong>深度学习任务failure的种类、根本原因和现有测试/诊断方法。</p><p>  <strong>方法：</strong>通过研究微软集群中实际遇到的fault，并对6位微软的开发者进行访问。</p></li><li><p><strong>Taxonomy of Real Faults in Deep Learning Systems</strong> (ICSE’20) [<a href="https://arxiv.org/pdf/1910.11015.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究在使用深度学习系统中会遇到的错误。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据，并通过20位科研工作者/从业人员进行label。</p></li><li><p><strong>Repairing Deep Neural Networks: Fix Patterns and Challenges</strong> (ICSE’20) [<a href="https://dl.acm.org/doi/pdf/10.1145/3377811.3380378">PDF</a>]</p><p>  <strong>内容：</strong>探究在深度神经网络中中bug的fix pattern和挑战。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li><li><p><strong>An Empirical Study on Bugs inside TensorFlow</strong> (DASFAA’20) [<a href="http://www.cs.sjtu.edu.cn/~zhonghao/paper/tfbug.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究TensorFlow框架内部bug的症状、根本原因和位置。</p><p>  <strong>方法：</strong>挖掘2017-2019年之间github上的bug。</p></li><li><p><strong>A Comprehensive Study on Challenges in Deploying Deep Learning Based Software</strong> (ESEC/FSE’20) [<a href="https://chenzhenpeng18.github.io/papers/FSE20_1.pdf">PDF</a>]</p><p>  内容：探究部署深度学习应用的挑战。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li><li><p><strong>An Empirical Study on Deployment Faults of Deep Learning Based Mobile Applications</strong> (ICSE’21) [<a href="https://chenzhenpeng18.github.io/papers/ICSE21.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究在移动端部署深度学习应用时的错误的症状和解决办法。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li></ul><h2 id="其他领域的相关工作"><a href="#其他领域的相关工作" class="headerlink" title="其他领域的相关工作"></a>其他领域的相关工作</h2><ul><li><p><strong>A Characteristic Study on Failures of Production Distributed Data-Parallel Programs</strong> (ICSE’13) <a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/icse13seip.pdf">PDF</a></p><p>  <strong>内容：</strong>探究分布式数据并行程序中数据和代码的缺陷的symptom、root cause、fix以及debugging practice。</p><p>  <strong>方法：</strong>挖掘Microsoft集群中的SCOPE job。</p></li><li><p><strong>Software Documentation Issues Unveiled</strong> (ICSE’19) [<a href="https://www.inf.usi.ch/phd/aghajani/resources/papers/agha2019b.pdf">PDF</a>]</p><p>  <strong>内容：</strong>对文档中的问题进行分类。</p><p>  <strong>方法：</strong>挖掘emails, github issue, GitHub pull-requests和 Stack Overflow中的数据。</p></li><li><p><strong>Going Big: A Large-Scale Study on What Big Data Developers Ask</strong> (ESEC/FSE’19) [<a href="https://academicworks.cuny.edu/cgi/viewcontent.cgi?article=1615&context=hc_pubs">PDF</a>]</p><p>  <strong>内容：</strong>探究大数据开发者所关心的主题、主题分类、主题流行度、主题难度、主题流行度和难度之间的关联度。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li></ul><ul><li><p><strong>Understanding Privacy-Related Questions on Stack Overflow</strong> (CHI’20) [<a href="https://groups.inf.ed.ac.uk/tulips/papers/tahaei2020SO.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究SO用户会将什么话题与“隐私”问题关联，以及用户为什么要参与到隐私相关话题中。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li><li><p><strong>Understanding Build Issue Resolution in Practice: Symptoms and Fix Patterns</strong> (ESEC/FSE’20) [<a href="https://chenzhenpeng18.github.io/papers/FSE20_2.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究构建（build）中用户所关心的话题、遇到问题的症状及根本原因。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li><li><p><strong>Interpreting Cloud Computer Vision Pain-Points: A Mining Study of Stack Overflow</strong> (ICSE’20) [<a href="https://arxiv.org/pdf/2001.10130.pdf">PDF</a>]</p><p>  <strong>内容：</strong>分析探究Cloud CV领域研究者遇到的痛点。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li></ul>]]></content>
+    <content type="html"><![CDATA[<h2 id="深度学习领域的Empirical-Study"><a href="#深度学习领域的Empirical-Study" class="headerlink" title="深度学习领域的Empirical Study"></a>深度学习领域的Empirical Study</h2><ul><li><p><strong>An Empirical Study on TensorFlow Program Bugs</strong> (ISSTA’18) [<a href="http://sccpu2.cse.ust.hk/castle/materials/issta18main-p98-p.pdf#:~:text=An%20Empirical%20Study%20on%20TensorFlow%20Program%20Bugs%20ISSTA'18%2C,further%20divided%20into%20two%20sub-phases%3A%20training%20and%20testing.">PDF</a>]</p><p>  <strong>内容：</strong>探究使用TensorFlow框架的程序中bug产生的原因、检测bug的挑战、用户如何应对检测bug的挑战、定位bug的挑战、用户如何应对定位bug的挑战。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li><li><p><strong>A Comprehensive Study on Deep Learning Bug Characteristics</strong> (ESEC/FSE’19)[<a href="https://dl.acm.org/doi/pdf/10.1145/3338906.3338955">PDF</a>]</p><p>  <strong>内容：</strong>探究使用5种流行的深度学习框架会遇到的bug类型、根本原因、产生的影响、Bug出现的阶段、共性以及bug的演变。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li><li><p><strong>An Empirical Study on Program Failures of Deep Learning Jobs</strong> (ICSE’20 <strong>Distinguished Paper Award</strong>) [<a href="https://wencongxiao.github.io/res/icse20/icse20-main-199.pdf">PDF</a>]</p><p>  <strong>内容：</strong>深度学习任务failure的种类、根本原因和现有测试/诊断方法。</p><p>  <strong>方法：</strong>通过研究微软集群中实际遇到的fault，并对6位微软的开发者进行访问。</p></li><li><p><strong>Taxonomy of Real Faults in Deep Learning Systems</strong> (ICSE’20) [<a href="https://arxiv.org/pdf/1910.11015.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究在使用深度学习系统中会遇到的错误。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据，并通过20位科研工作者/从业人员进行label。</p></li><li><p><strong>Repairing Deep Neural Networks: Fix Patterns and Challenges</strong> (ICSE’20) [<a href="https://dl.acm.org/doi/pdf/10.1145/3377811.3380378">PDF</a>]</p><p>  <strong>内容：</strong>探究在深度神经网络中中bug的fix pattern和挑战。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li><li><p><strong>An Empirical Study on Bugs inside TensorFlow</strong> (DASFAA’20) [<a href="http://www.cs.sjtu.edu.cn/~zhonghao/paper/tfbug.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究TensorFlow框架内部bug的症状、根本原因和位置。</p><p>  <strong>方法：</strong>挖掘2017-2019年之间github上的bug。</p></li><li><p><strong>A Comprehensive Study on Challenges in Deploying Deep Learning Based Software</strong> (ESEC/FSE’20) [<a href="https://chenzhenpeng18.github.io/papers/FSE20_1.pdf">PDF</a>]</p><p>  内容：探究部署深度学习应用的挑战。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li><li><p><strong>An Empirical Study on Deployment Faults of Deep Learning Based Mobile Applications</strong> (ICSE’21) [<a href="https://chenzhenpeng18.github.io/papers/ICSE21.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究在移动端部署深度学习应用时的错误的症状和解决办法。</p><p>  <strong>方法：</strong>挖掘Stack Overflow和github中的数据。</p></li></ul><h2 id="其他领域的相关工作"><a href="#其他领域的相关工作" class="headerlink" title="其他领域的相关工作"></a>其他领域的相关工作</h2><ul><li><p><strong>A Characteristic Study on Failures of Production Distributed Data-Parallel Programs</strong> (ICSE’13) [<a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/icse13seip.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究分布式数据并行程序中数据和代码的缺陷的symptom、root cause、fix以及debugging practice。</p><p>  <strong>方法：</strong>挖掘Microsoft集群中的SCOPE job。</p></li><li><p><strong>Software Documentation Issues Unveiled</strong> (ICSE’19) [<a href="https://www.inf.usi.ch/phd/aghajani/resources/papers/agha2019b.pdf">PDF</a>]</p><p>  <strong>内容：</strong>对文档中的问题进行分类。</p><p>  <strong>方法：</strong>挖掘emails, github issue, GitHub pull-requests和 Stack Overflow中的数据。</p></li><li><p><strong>Going Big: A Large-Scale Study on What Big Data Developers Ask</strong> (ESEC/FSE’19) [<a href="https://academicworks.cuny.edu/cgi/viewcontent.cgi?article=1615&context=hc_pubs">PDF</a>]</p><p>  <strong>内容：</strong>探究大数据开发者所关心的主题、主题分类、主题流行度、主题难度、主题流行度和难度之间的关联度。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li></ul><ul><li><p><strong>Understanding Privacy-Related Questions on Stack Overflow</strong> (CHI’20) [<a href="https://groups.inf.ed.ac.uk/tulips/papers/tahaei2020SO.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究SO用户会将什么话题与“隐私”问题关联，以及用户为什么要参与到隐私相关话题中。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li><li><p><strong>Understanding Build Issue Resolution in Practice: Symptoms and Fix Patterns</strong> (ESEC/FSE’20) [<a href="https://chenzhenpeng18.github.io/papers/FSE20_2.pdf">PDF</a>]</p><p>  <strong>内容：</strong>探究构建（build）中用户所关心的话题、遇到问题的症状及根本原因。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li><li><p><strong>Interpreting Cloud Computer Vision Pain-Points: A Mining Study of Stack Overflow</strong> (ICSE’20) [<a href="https://arxiv.org/pdf/2001.10130.pdf">PDF</a>]</p><p>  <strong>内容：</strong>分析探究Cloud CV领域研究者遇到的痛点。</p><p>  <strong>方法：</strong>挖掘Stack Overflow的数据。</p></li></ul>]]></content>
     
     
     <summary type="html">总结与深度学习相关的Empirical Study，以及其他领域中类似的Empirical Study。</summary>
@@ -275,13 +298,13 @@
     
     
     
-    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
+    <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
     
     <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
     
-    <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
-    
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
     
   </entry>
   
@@ -323,9 +346,9 @@
     
     
     
-    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
-    
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
     
     <category term="上下文切换" scheme="https://diandiangu.github.io/tags/%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2/"/>
     
@@ -352,11 +375,11 @@
     
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
     
-    <category term="深度学习框架" scheme="https://diandiangu.github.io/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%A1%86%E6%9E%B6/"/>
-    
     <category term="SOSP" scheme="https://diandiangu.github.io/tags/SOSP/"/>
     
     <category term="通信调度" scheme="https://diandiangu.github.io/tags/%E9%80%9A%E4%BF%A1%E8%B0%83%E5%BA%A6/"/>
+    
+    <category term="深度学习框架" scheme="https://diandiangu.github.io/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%A1%86%E6%9E%B6/"/>
     
   </entry>
   
@@ -375,13 +398,13 @@
     
     
     
-    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
+    <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
     
     <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
     
-    <category term="集群调度" scheme="https://diandiangu.github.io/tags/%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6/"/>
-    
     <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
     
   </entry>
   
