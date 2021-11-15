@@ -1,0 +1,315 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>分布式设施上的可扩展深度学习：挑战、技术、和工具 | 论文与代码阅读笔记</title><meta name="keywords" content="机器学习系统,调研"><meta name="author" content="GDD"><meta name="copyright" content="GDD"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta http-equiv="Cache-Control" content="no-transform"><meta http-equiv="Cache-Control" content="no-siteapp"><meta name="description" content="本文探索了分布式设备中深度学习的“可扩展性”的挑战、方法和工具，包括用于深度学习的设备、并行深度学习训练的方法、多租户资源调度、训练和模型数据管理四个方面。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="分布式设施上的可扩展深度学习：挑战、技术、和工具">
+<meta property="og:url" content="https://diandiangu.github.io/2020/07/20/DistributedInfrastructures/index.html">
+<meta property="og:site_name" content="论文与代码阅读笔记">
+<meta property="og:description" content="本文探索了分布式设备中深度学习的“可扩展性”的挑战、方法和工具，包括用于深度学习的设备、并行深度学习训练的方法、多租户资源调度、训练和模型数据管理四个方面。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://diandiangu.github.io/img/DistributedInfrastructures/0.png">
+<meta property="article:published_time" content="2020-07-20T06:40:03.000Z">
+<meta property="article:modified_time" content="2021-11-15T07:22:45.732Z">
+<meta property="article:author" content="GDD">
+<meta property="article:tag" content="机器学习系统">
+<meta property="article:tag" content="调研">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://diandiangu.github.io/img/DistributedInfrastructures/0.png"><link rel="shortcut icon" href="/img/favicon.jpeg"><link rel="canonical" href="https://diandiangu.github.io/2020/07/20/DistributedInfrastructures/"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css"><script>var GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"search.xml","languages":{"hits_empty":"找不到您查询的内容：${query}"}},
+  translate: {"defaultEncoding":2,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"简"},
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  ClickShowText: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  justifiedGallery: {
+    js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+    css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+};
+
+var saveToLocal = {
+  set: function setWithExpiry(key, value, ttl) {
+    const now = new Date()
+    const expiryDay = ttl * 86400000
+    const item = {
+      value: value,
+      expiry: now.getTime() + expiryDay,
+    }
+    localStorage.setItem(key, JSON.stringify(item))
+  },
+
+  get: function getWithExpiry(key) {
+    const itemStr = localStorage.getItem(key)
+
+    if (!itemStr) {
+      return undefined
+    }
+    const item = JSON.parse(itemStr)
+    const now = new Date()
+
+    if (now.getTime() > item.expiry) {
+      localStorage.removeItem(key)
+      return undefined
+    }
+    return item.value
+  }
+}</script><script id="config_change">var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2021-11-15 15:22:45'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(function () {  window.activateDarkMode = function () {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+    }
+  }
+  window.activateLightMode = function () {
+    document.documentElement.setAttribute('data-theme', 'light')
+   if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+    }
+  }
+  const autoChangeMode = 'false'
+  const t = saveToLocal.get('theme')
+  if (autoChangeMode === '1') {
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+    const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+    const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+    if (t === undefined) {
+      if (isLightMode) activateLightMode()
+      else if (isDarkMode) activateDarkMode()
+      else if (isNotSpecified || hasNoSupport) {
+        const now = new Date()
+        const hour = now.getHours()
+        const isNight = hour <= 6 || hour >= 18
+        isNight ? activateDarkMode() : activateLightMode()
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+        if (saveToLocal.get('theme') === undefined) {
+          e.matches ? activateDarkMode() : activateLightMode()
+        }
+      })
+    } else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else if (autoChangeMode === '2') {
+    const now = new Date()
+    const hour = now.getHours()
+    const isNight = hour <= 6 || hour >= 18
+    if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+    else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else {
+    if (t === 'dark') activateDarkMode()
+    else if (t === 'light') activateLightMode()
+  }const asideStatus = saveToLocal.get('aside-status')
+if (asideStatus !== undefined) {
+   if (asideStatus === 'hide') {
+     document.documentElement.classList.add('hide-aside')
+   } else {
+     document.documentElement.classList.remove('hide-aside')
+   }
+}})()</script><meta name="generator" content="Hexo 5.2.0"><link rel="alternate" href="/atom.xml" title="论文与代码阅读笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="author-avatar"><img class="avatar-img" src="/img/favicon.jpeg" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">文章</div><div class="length-num">22</div></a></div></div><div class="data-item is-center"><div class="data-item-link"><a href="/tags/"><div class="headline">标签</div><div class="length-num">27</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div></div></div><div id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/DistributedInfrastructures/0.png)"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">论文与代码阅读笔记</a></span><span id="menus"><div id="search_button"><a class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div><span class="close" id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></span></span></nav><div id="post-info"><h1 class="post-title">分布式设施上的可扩展深度学习：挑战、技术、和工具</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2020-07-20T06:40:03.000Z" title="发表于 2020-07-20 14:40:03">2020-07-20</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2021-11-15T07:22:45.732Z" title="更新于 2021-11-15 15:22:45">2021-11-15</time></span></div><div class="meta-secondline"> </div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h1 id="Scalable-Deep-Learning-on-Distributed-Infrastructures-Challenges-Techniques-and-Tools"><a href="#Scalable-Deep-Learning-on-Distributed-Infrastructures-Challenges-Techniques-and-Tools" class="headerlink" title="Scalable Deep Learning on Distributed Infrastructures: Challenges, Techniques, and Tools"></a>Scalable Deep Learning on Distributed Infrastructures: Challenges, Techniques, and Tools</h1><p>为了让深度学习效果更好，深度学习系统的“可扩展性”需要提升。本文探索了分布式设备中深度学习的“可扩展性”的挑战、方法和工具，这包括用于深度学习的设备、并行深度学习训练的方法、多租户资源调度、训练和模型数据管理四个方面。<br>本文分析并比较了11个目前开源的深度学习框架和工具，并探究哪些方法有常见的实际应用。最后，本文提出深度学习系统中值得进一步探究的未来研究方向。</p>
+<h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>深度学习在一些领域中表现优越，受到了越来越多的关注。深度学习的应用在各种领域都有应用潜质。很多公司开发了可以自动执行dl模型的强大的深度学习框架。<br>使得DL成功的一个因素是模型训练的三个维度上。1. 模型本身的大小和复杂度。（深度学习模型从最简单的模型逐渐向复杂演变）2. 训练数据量 3. 设备infrastructure高度并行的硬件，GPU等）<br>survey专注于处理DL使用的大型、分布式设备时遇到的挑战。管理大量的DL模型并用大量的数据训练这些模型很有挑战性。这涉及到并行的问题、资源调度与扩展、数据管理与可移植性等。这个领域发展迅速。与此同时，我们可以看到大量开源深度学习框架和编排系统出现。</p>
+<h3 id="补充调查-Complementary-survey"><a href="#补充调查-Complementary-survey" class="headerlink" title="补充调查 Complementary survey"></a>补充调查 Complementary survey</h3><p>已有survey not focused on scalability and distributed systems for DL</p>
+<h3 id="survey结构"><a href="#survey结构" class="headerlink" title="survey结构"></a>survey结构</h3><p>In Section 2, we introduce DL and provide the foundations for the further discussion of DL systems.<br>In Section 3, we discuss the challenges and techniques of scalable DL in detail. We cover four important aspects: Distributed infrastructures, parallelization of DL training, resource scheduling and data management.<br>In Section 4, we analyze and compare 11 open-source DL frameworks and tools that put scalable DL into practice.<br>Finally, in Section 5,we conclude this survey and provide an outlook on current trends and open problems in the field that deserve further research.</p>
+<h3 id="分布式深度学习"><a href="#分布式深度学习" class="headerlink" title="分布式深度学习"></a>分布式深度学习</h3><p>用大量数据训练大模型通常需要有多个计算节点的分布式设施，每个节点中可能有多个GPU。这带来一系列的挑战：1.<br>避免由于通信瓶颈而停止使用costly GPU资源；2. 不同用户/进程之间共享计算、存储和网络资源，以减少开销并提供可拓展性。Figure 3</p>
+<h4 id="硬件设施"><a href="#硬件设施" class="headerlink" title="硬件设施"></a>硬件设施</h4><ul>
+<li><p><strong>深度学习硬件的组成</strong><br>多核CPU-&gt;GPU-&gt;FPGAs-&gt;……</p>
+</li>
+<li><p><strong>用于深度学习的大规模设备：</strong>有许多内部连接的硬件组成，构成一个warehouse-scale computer（仓库规模计算机）。</p>
+<ul>
+<li><p>Facebook：训练时既用GPU也用CPU，依靠CPU做inference，放弃使用RDMA/NCCL。</p>
+</li>
+<li><p>腾讯：也用GPU+CPU。他们的深度学习系统Mariana由三种框架组成，用于不同的设备/用况。</p>
+</li>
+<li><p>微软：用于DL的大型分布式系统Adam。分割模型时，模型的层可以放进L3缓存，以提升训练的performance。</p>
+</li>
+<li><p>谷歌：TPU，采用独特的通信协议</p>
+</li>
+<li><p>HPC：Infiniband有更高的吞吐率</p>
+<p>总结来说：这些设备的异构性都很强，除了GPU服务器以外，还包含CPU。除此以外，也有专门用于深度学习的设备，尤其在谷歌和学术研究中。在HPC设备中，我们看到，为了使得性能更好，深度学习系统是针对设备的，例如NCCL，MPI等。</p>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="并行的方法"><a href="#并行的方法" class="headerlink" title="并行的方法"></a>并行的方法</h4><ul>
+<li><p><strong>数据并行</strong><br>挑战：不同worker之间parameter的同步。在3.3中进一步讨论这些挑战。数据并行主要的优势在于任何模型都可以用，对于计算量大但是参数少的op（如CNN）来说可以很好的scale（？？）。但是对于参数特别多的op来说，参数的同步会成为瓶颈。通过使用更大的batch size，这个问题可以被缓解，但这会导致模型convergence不佳。另外，当模型对于单个设备来说太大的时候，数据并行的模式不合适。在数据并行时，默认训练数据时相互独立的且同分布的。</p>
+</li>
+<li><p><strong>模型并行</strong><br>模型并行中的主要挑战是：如何划分模型。一个常用方法是用强化学习，从一个初始的划分方案开始逐步探究。Streaming rollout的方法只适用于RNN。<br>模型并行的主要优势是：减少内存占用，适用于超大模型。<br>模型并行的缺点：大量的通信。由于通信和同步的延迟，worker可能停止工作，因此增加模型并行的degree（worker数？）并不一定会提升训练速度。</p>
+</li>
+<li><p><strong>流水线并行：</strong>模型并行中结合了数据并行，例如piprdream，通过microbatches充分利用worker，与此同时爆出了模型并行的优点。</p>
+</li>
+<li><p><strong>混合并行（Hybrid）</strong><br>  前三者的混合。</p>
+<p>  Mesh-TensorFlow：模型并行+数据并行</p>
+<p>  卷积/池化适合数据并行（大量计算，少量param）；全脸阶层适合模型并行。</p>
+<p>  除此以外，还有layer-wise并行/自动选择并行模式.</p>
+</li>
+</ul>
+<h4 id="数据并行的优化"><a href="#数据并行的优化" class="headerlink" title="数据并行的优化"></a>数据并行的优化</h4><p>数据并行中，parameter的同步导致三个方面的挑战：1. 如何同步参数。使用中心化的方式还是去中心化的方式？2. 何时同步参数。是否应该没个batch都同步？3. 如何减少通信Overhead.</p>
+<ul>
+<li><p><strong>系统架构</strong><br>  主要挑战是需要一个可扩展的系统架构；另外系统需要易于配置（无需额外调整参数时performance就足够好了）；需要开发更底层的primitives（例如NCCL）。<br>  （1）中心化的。worker时不时地向parameter server发送参数更新。parameter server时数据并行中最重要的架构。一种常用的方法是：用哪个parameter shards，分布在不同的ps上，这些参数可以并行更新。</p>
+<p>  P.S. 计算节点要训练时，向参数服务器查询所需参数（只需要一小部分）<br>  （2）去中心化。无ps，直接通过allreduce更新参数。此时，worker之间的拓扑结构十分重要。在全都连接起来的network中，通信的cost为O(n^2)，成为一个bottleneck。一个常用的减少overhead的方法是用ring all-reduce。</p>
+<p>  P.S. ring all-reduce的通信成本是恒定的，与GPU数量无关，完全由系统中gpu之间最慢的连接决定。</p>
+<p>  该算法分两个步骤进行:首先是scatter-reduce，然后是allgather。在scatter-reduce步骤中，GPU将交换数据，使每个GPU可得到最终结果的一个块。在allgather步骤中，gpu将交换这些块，以便所有gpu得到完整的最终结果。具体细节见：<a target="_blank" rel="noopener" href="https://www.jianshu.com/p/8c0e7edbefb9">https://www.jianshu.com/p/8c0e7edbefb9</a></p>
+<p>  “butterfly”等等提起的结构也被提出。</p>
+<p>  非全部连接的network的缺点：the propagation of parameter updates to all workers needs more time, as there may be multiple hops between a pair of workers.（个人猜测：总时间下降，单个参数传输时间上升）</p>
+<p>  除了topology以外，还有其他减少网络负载的方法。可以把需要交换的gradient分割，每次同步只发送gradient的一部分。</p>
+<p>  去中心化方法与中心化方法比较：优势：免去了处理parameter server的麻烦；容错性更强（免去了checkpoint 权重超多的ps的麻烦）。</p>
+</li>
+</ul>
+<p>在某些情况下，如果网络通信较慢，去中心化的架构比中心化的架构表现更好。<br>中心化和去中心化的学习在开元DL框架中都有广泛应用。有些框架（tf，mx）两种都支持。<br>（3）联邦学习。训练数据存储在用户的移动设备中，用户本地计算结果用于训练一个全局模型。保护隐私+减小带宽需求。<br>移动设备的带宽小，上传比下载慢很多，所以不可能重复向一个中心化的parameter server/去中心化的peer nodes上传并更新大模型的参数。为了缓解这个问题，有相关工作研究了参数采样和压缩。有人提出了减少数据上传的算法：在每一轮中，选择一些客户端，每一个被选中的客户端基于它所拥有的训练数据计算loss。为了能够converge，在客户端上的模型实例葱同样的随机初始化开始（训练）很重要。最终，一个中心化的服务器aggregate来自被选中的客户端的gradient。这个算法实际上与中心化的方法等价，但是在数据分布不同的情况下，中心化的方法表现得更好。<br>联邦学习仍然在发展中的早期，没有很多开源的深度学习框架支持联邦学习。近期出现了第一批联邦学习的工具：TensorFlow Federated是一个联邦学习实验的模拟器。PySyft是一个可以用PyTorch进行保护隐私的联邦学习的Python库。特别地，PySyft使用differential privacy methods保护敏感数据。</p>
+<ul>
+<li><p><strong>同步</strong><br>  何时再并行的worker之间同步参数受到了广泛的关注。主要的挑战是平衡convergence的速度和同步所需的cost。主要有三种方法：Synchronous（同步）, bounded asynchronous（有界异步）, and asynchronous training（异步训练）。<br>  （1）同步：每个iteration之后同步参数更新。好处是convergence很快，缺点是容易有straggler problem（速度收到最慢的worker的限制）。有许多工作致力于解决这里的straggler problem（例如最快的task可以取得最慢的task中已经算出来的部分更新）/改进创新同步的训练（针对联邦学习中的同步训练的）。同步的训练在许多的开源深度学习框架中都有应用。这样的方法尤其适合单机多卡的并行训练情况，这种情况下通信延迟很低，计算负载均衡，所以straggler problem不明显。</p>
+<p>  （2）有界异步：由于深度学习的特性，少量的偏移和不确定性并不会对模型的准确率产生较大影响。在有界异步中，worker可以在没有实时更新的参数上进行训练，但是“没有实时更新的程度”是受到约束的。一定的staleness允许进行数学分析模型的收敛性证明。“界限”可以让worker在独立训练方面有更多的自由性，可以在一定程度上减少straggler problem的影响，并增加吞吐率。有许多该方法的相关工作。（例如异构worker中可以在Stale Synchronous Parallel 模型的基础上使用动态的学习率）。该方法在深度学习框架中没有广泛应用，因为观察到的相关延迟非常小，SSP的优势不够明显。但也有一些例外（相关应用）。</p>
+<p>  （3）异步：每个worker对模型的更新完全独立。这使得数学分析模型的收敛性变得很难，但是可以完全避免straggler problem。有许多相关工作，例如Hogwild中worker不需要任何的锁就可以修改共享内存，允许worker任意修改其他worker的参数更新，只要只修改模型的一小部分，收敛效果可以很好。有许多基于Hogwild的工作。除此之外也有lock-bound的相关工作。异步训练在许多开园深度学习框架中都有应用。</p>
+</li>
+<li><p><strong>通信</strong><br>  主要的挑战是避免communication成为整个训练过程中的bottleneck。主要有三种提高通信效率的方法：降低模型准确率、压缩模型更新、改进通信调度。<br>  （1）降低模型的准确率：可以减少通信带宽，还可以减少模型大小（在GPU等资源受限的硬件上有用）。相关方法有：将模型的精度降低到16位等类似的降低精度的方法；除此以外，有工作结合两种optimize的方法来提高模型的准确率。模型量化的应用十分广泛。<br>  （2）压缩模型更新：无损失的压缩非常有限，通常都采用有损失的压缩方法。主要方法：梯度量化、梯度稀疏化（只传输重要的梯度）。在使用梯度量化的方法是，为了达到较高的准确率，有人提出error-feedback的方法：把上次量化梯度损失的梯度数值累加到后面的梯度上。梯度稀疏化：许多的梯度非常小（接近0），对训练没有什么贡献。CNTK和MXNet里有相关应用。<br>  （3）改进通信调度：数据并行中的通信模式通常是“突发式的”，尤其是在严格要求同步的系统中。为了不因为超过通信带宽而导致通信延迟，不同worker之间的通信需要被调度使得他们在时间上不重合。可以考虑到重要性或时效性有限传送一些特定的信息。有的方法优先传送对于模型收敛最重要的参数更新。有工作观察到在tf和pytorch等dl系统中，参数在徐念和推断过程中被随机地传送。这导致iteration time的方差很大，从而使得整个过程变慢。为了解决这个问题，TicTac强制设置一个数据传输的时间。复杂的通信调度方法还没有在开园深度学习框架中应用，可能是因为方法创新性较强。</p>
+</li>
+</ul>
+<h4 id="调度和可伸展性"><a href="#调度和可伸展性" class="headerlink" title="调度和可伸展性"></a>调度和可伸展性</h4><p>深度学习中的调度问题指的是如何将训练的进程map到训练的设备节点中去。有三个方面：1. 单租户 2. 多租户 3. 模型架构与超参数搜索。</p>
+<ul>
+<li><p><strong>单租户</strong><br>  需要解决三个问题：哪个进程被分配到哪个资源上？被分配到同样资源上的进程的执行顺序？进程数和资源数是何时以及如何被适应的？<br>  在模型并行中，一个很重要的问题是如何划分模型。完成模型划分后，需要解决的问题是在哪里放置这些模型的部分，以及何时训练模型的哪一部分。不同模型部分之间的训练在调度上存在互相依赖。针对这一问题，有人提出了一些启发式的算法，但是都没有在深度学习框架中应用。特别地，模型划分和调度问题之间存在互相的依赖，这是有待被全面探索的。动态控制流的出现带来了其他挑战，这使得静态调度变得不可行。有工作做出了有先进scheduler的模型并行机器学习框架，能够根据依赖关系使得计算优先。Litz是一个可扩展的机器学习框架，scaling的开销很小（数据并行）。有的工作可以动态分配一些临时的资源。还有的工作实现了可以在运行时调整worker数量的去中心化的数据并行深度学习系统。</p>
+</li>
+<li><p><strong>多租户</strong><br>  YARN、Borg等resource scheduler不是针对深度学习任务的。针对深度学习的resource scheduler是有必要的。<br>Dolphine是一个中心化的可伸缩的数据并行机器学习框架。通过一个开销计算模型和持续的监视，parameter server的config和worker动态变化。有工作分析大型DL cluster系统的trace，根据分析结果提出了一些scheduling的建议。schedule的目标可以只是达到最高的模型准确率，也可以包括各租户之间的公平性等。<br>除此以外，还有【深度学习服务】的相关工作。IBM：DL as a service，深度学习的云端解决方案。</p>
+</li>
+<li><p><strong>模型架构和超参数搜索</strong><br>  这是深度学习领域中一个非常重要的问题。例如，给定一个深度学习任务，什么模型架构能够达到最高的模型准确率（CNN中，需要多少层，每层多大？）？什么样的超参数设置可以使得模型收敛速度最快？找到这样问题的答案很困难。典型的方法是不断尝试各种架构和超参数。另有考虑到其他方法。例如，可以把需要访问同样训练数据的训练任务batch到一起以节省网络负载，并在后续的执行中可以进一步优化。有的scheduler支持较早地停下在相应config下表现较差的训练任务，还可以预测准确率表现，还可以给预期准确率较高的任务分配更多的资源。有的系统为了单块GPU上多个训练任务而设计：一起执行多个模型，并一起做算子融合、共享I/O等优化。</p>
+</li>
+</ul>
+<h4 id="数据管理"><a href="#数据管理" class="headerlink" title="数据管理"></a>数据管理</h4><p>既指对训练数据的管理，也指对训练完或训练中模型的管理。</p>
+<ul>
+<li><p><strong>训练数据</strong><br>  获取大量带标签的训练数据很难。一个方法是手动标记，但是需要大量时间精力。因此，有一些可以用可以方便获得的、标签不是很准确的（noisy）数据训练的方法。例如，有方法训练模型用于预测训练集的noise type（？）。这是一个很大的研究领域。<br>训练数据的预处理也很重要。包括数据正则化和数据增强（例如图片中物体的方向）。用失真的数据训练可以增强模型的鲁棒性。<br>用对象存储训练数据简单， 开销低，但是读数据的带宽远低于训练的吞吐率。有人为深度学习的栈单独增加文件系统以解决这个问题，把单个读请求转换为多个并发的请求，一次申请得到更大的总带宽。</p>
+</li>
+<li><p><strong>模型数据</strong><br>  包括对已训练模型的跟踪，存储和索引。<br>增强深度学习框架之间的互操作性：ONNX在不同深度学习框架之间交换模型数据。ModelDB和ModelHub可以通过SQL或其他查询模型</p>
+</li>
+</ul>
+<h3 id="不同深度学习框架的对比"><a href="#不同深度学习框架的对比" class="headerlink" title="不同深度学习框架的对比"></a>不同深度学习框架的对比</h3><p><strong>Caffe：</strong>Berkley AI research团队和社区共同开发。具有命令行、PyThon和MATLAB API。model zoo是一个与训练好的模型的集合。在GPU上通过CUDA平台（使用cudnn库）实现简单的并行。不支持直接的分布式训练，但是Caffe的一些分支和扩展支持分布式训练。在文档中有关如何自定义操作的内容较少。Caffe不支持多节点部署，也无法实现自定义的并行方法。<br>其他框架详见表格。</p>
+<h3 id="总结和展望"><a href="#总结和展望" class="headerlink" title="总结和展望"></a>总结和展望</h3><p>随着训练数据和深度学习模型越来越多，对训练和模型数据的管理的挑战越来越大。为了深度学习扩展性中新的瓶颈和限制可以被消除，需要更好的工具支持。另外，目前去中心化训练的发展，可能会改变深度学习设备和工具的设计。<br>未来的发展趋势：1. 目前可扩展的深度学习主要集中在并行和分布式的方面，数据管理和多租户调度方面需要更多的关注。2. DL serving（用深度学习做inference）也受到越来越多的关注。尽管和训练类似，但是解决方案完全不同。3. 隐私问题也十分重要。</p>
+<hr>
+<p><strong>原文作者：</strong>Ruben Mayer, Hhans-Arno Jaconson<br><strong>原文链接：</strong><a target="_blank" rel="noopener" href="https://www.researchgate.net/profile/Ruben_Mayer/publication/332033965_Scalable_Deep_Learning_on_Distributed_Infrastructures_Challenges_Techniques_and_Tools/links/5d90f42492851c33e9488837/Scalable-Deep-Learning-on-Distributed-Infrastructures-Challenges-Techniques-and-Tools.pdf">https://www.researchgate.net/profile/Ruben_Mayer/publication/332033965_Scalable_Deep_Learning_on_Distributed_Infrastructures_Challenges_Techniques_and_Tools/links/5d90f42492851c33e9488837/Scalable-Deep-Learning-on-Distributed-Infrastructures-Challenges-Techniques-and-Tools.pdf</a></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">GDD</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://diandiangu.github.io/2020/07/20/DistributedInfrastructures/">https://diandiangu.github.io/2020/07/20/DistributedInfrastructures/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://diandiangu.github.io" target="_blank">论文与代码阅读笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/">机器学习系统</a><a class="post-meta__tags" href="/tags/%E8%B0%83%E7%A0%94/">调研</a></div><div class="post_share"><div class="social-share" data-image="/img/DistributedInfrastructures/0.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-left"><a href="/2020/09/21/atc19jeon/"><img class="prev-cover" src="/img/atc19jeon/1.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">分析面向DNN训练的大型多租户GPU集群</div></div></a></div><div class="next-post pull-right"><a href="/2020/07/20/FlexFlow/"><img class="next-cover" src="/img/FlexFlow/3.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">更多维度的深度神经网络并行策略</div></div></a></div></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span> 相关推荐</span></div><div class="relatedPosts-list"><div><a href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享"><img class="cover" src="/img/AFS/3.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-04-13</div><div class="title">AFS：分布式深度学习中的弹性资源共享</div></div></a></div><div><a href="/2020/12/02/AntMan-0/" title="AntMan：面向深度学习的GPU集群动态弹性伸缩方法"><img class="cover" src="/img/antman/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-02</div><div class="title">AntMan：面向深度学习的GPU集群动态弹性伸缩方法</div></div></a></div><div><a href="/2020/12/07/BS/" title="ByteScheduler: 加速分布式训练的通信调度器"><img class="cover" src="/img/BS/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-07</div><div class="title">ByteScheduler: 加速分布式训练的通信调度器</div></div></a></div><div><a href="/2021/09/19/Blink/" title="Blink：面向分布式机器学习的快速、通用的通信原语"><img class="cover" src="/img/Blink/Blink.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-09-19</div><div class="title">Blink：面向分布式机器学习的快速、通用的通信原语</div></div></a></div><div><a href="/2021/03/15/BytePS/" title="BytePS：加速异构集群中分布式训练的统一架构"><img class="cover" src="/img/BytePS/2.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-03-15</div><div class="title">BytePS：加速异构集群中分布式训练的统一架构</div></div></a></div><div><a href="/2021/11/14/CO2e/" title="碳排放与大规模神经网络训练"><img class="cover" src="/img/CO2e/CO2e.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-11-14</div><div class="title">碳排放与大规模神经网络训练</div></div></a></div></div></div><hr/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div class="vcomment" id="vcomment"></div></div></div></div></div><div class="aside_content" id="aside_content"><div class="card-widget card-info"><div class="card-content"><div class="card-info-avatar is-center"><img class="avatar-img" src="/img/favicon.jpeg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/><div class="author-info__name">GDD</div><div class="author-info__description"></div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">22</div></a></div><div class="card-info-data-item is-center"><a href="/tags/"><div class="headline">标签</div><div class="length-num">27</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gudiandian"><i class="fab fa-github"></i><span>Follow Me on GitHub</span></a></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="card-content"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#Scalable-Deep-Learning-on-Distributed-Infrastructures-Challenges-Techniques-and-Tools"><span class="toc-number">1.</span> <span class="toc-text">Scalable Deep Learning on Distributed Infrastructures: Challenges, Techniques, and Tools</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AE%80%E4%BB%8B"><span class="toc-number">1.1.</span> <span class="toc-text">简介</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%A1%A5%E5%85%85%E8%B0%83%E6%9F%A5-Complementary-survey"><span class="toc-number">1.1.1.</span> <span class="toc-text">补充调查 Complementary survey</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#survey%E7%BB%93%E6%9E%84"><span class="toc-number">1.1.2.</span> <span class="toc-text">survey结构</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E5%B8%83%E5%BC%8F%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0"><span class="toc-number">1.1.3.</span> <span class="toc-text">分布式深度学习</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E7%A1%AC%E4%BB%B6%E8%AE%BE%E6%96%BD"><span class="toc-number">1.1.3.1.</span> <span class="toc-text">硬件设施</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%B9%B6%E8%A1%8C%E7%9A%84%E6%96%B9%E6%B3%95"><span class="toc-number">1.1.3.2.</span> <span class="toc-text">并行的方法</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E6%95%B0%E6%8D%AE%E5%B9%B6%E8%A1%8C%E7%9A%84%E4%BC%98%E5%8C%96"><span class="toc-number">1.1.3.3.</span> <span class="toc-text">数据并行的优化</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E8%B0%83%E5%BA%A6%E5%92%8C%E5%8F%AF%E4%BC%B8%E5%B1%95%E6%80%A7"><span class="toc-number">1.1.3.4.</span> <span class="toc-text">调度和可伸展性</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E6%95%B0%E6%8D%AE%E7%AE%A1%E7%90%86"><span class="toc-number">1.1.3.5.</span> <span class="toc-text">数据管理</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%8D%E5%90%8C%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%A1%86%E6%9E%B6%E7%9A%84%E5%AF%B9%E6%AF%94"><span class="toc-number">1.1.4.</span> <span class="toc-text">不同深度学习框架的对比</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%80%BB%E7%BB%93%E5%92%8C%E5%B1%95%E6%9C%9B"><span class="toc-number">1.1.5.</span> <span class="toc-text">总结和展望</span></a></li></ol></li></ol></li></ol></div></div></div><div class="card-widget card-recent-post"><div class="card-content"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2021/11/14/CO2e/" title="碳排放与大规模神经网络训练"><img src="/img/CO2e/CO2e.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="碳排放与大规模神经网络训练"/></a><div class="content"><a class="title" href="/2021/11/14/CO2e/" title="碳排放与大规模神经网络训练">碳排放与大规模神经网络训练</a><time datetime="2021-11-14T09:02:49.000Z" title="发表于 2021-11-14 17:02:49">2021-11-14</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/09/19/Blink/" title="Blink：面向分布式机器学习的快速、通用的通信原语"><img src="/img/Blink/Blink.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Blink：面向分布式机器学习的快速、通用的通信原语"/></a><div class="content"><a class="title" href="/2021/09/19/Blink/" title="Blink：面向分布式机器学习的快速、通用的通信原语">Blink：面向分布式机器学习的快速、通用的通信原语</a><time datetime="2021-09-19T12:53:53.000Z" title="发表于 2021-09-19 20:53:53">2021-09-19</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/05/14/Pollux/" title="Pollux：面向深度学习有效吞吐量优化的协同适应集群调度"><img src="/img/Pollux/Pollux.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Pollux：面向深度学习有效吞吐量优化的协同适应集群调度"/></a><div class="content"><a class="title" href="/2021/05/14/Pollux/" title="Pollux：面向深度学习有效吞吐量优化的协同适应集群调度">Pollux：面向深度学习有效吞吐量优化的协同适应集群调度</a><time datetime="2021-05-14T11:15:28.000Z" title="发表于 2021-05-14 19:15:28">2021-05-14</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享"><img src="/img/AFS/3.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="AFS：分布式深度学习中的弹性资源共享"/></a><div class="content"><a class="title" href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享">AFS：分布式深度学习中的弹性资源共享</a><time datetime="2021-04-13T07:53:33.000Z" title="发表于 2021-04-13 15:53:33">2021-04-13</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/04/09/Rammer/" title="Rammer：如何通过全局视角编译深度学习计算"><img src="/img/Rammer/2.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Rammer：如何通过全局视角编译深度学习计算"/></a><div class="content"><a class="title" href="/2021/04/09/Rammer/" title="Rammer：如何通过全局视角编译深度学习计算">Rammer：如何通过全局视角编译深度学习计算</a><time datetime="2021-04-09T09:40:52.000Z" title="发表于 2021-04-09 17:40:52">2021-04-09</time></div></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2021 By GDD</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="translateLink" type="button" title="简繁转换">简</button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="直达评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></div><div id="local-search"><div class="search-dialog"><div class="search-dialog__title" id="local-search-title">本地搜索</div><div id="local-input-panel"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div></div><hr/><div id="local-search-results"><div id="local-hits"></div><div id="local-stats"><div class="local-search-stats__hr" id="hr"><span>由</span> <a target="_blank" rel="noopener" href="https://github.com/wzpan/hexo-generator-search" style="color:#49B1F5;">hexo-generator-search</a>
+ <span>提供支持</span></div></div></div><span class="search-close-button"><i class="fas fa-times"></i></span></div><div id="search-mask"></div></div><div><script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="/js/tw_cn.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js"></script><script src="/js/search/local-search.js"></script><div class="js-pjax"><script>if (!window.MathJax) {
+  window.MathJax = {
+    loader: {
+      source: {
+        '[tex]/amsCd': '[tex]/amscd'
+      }
+    },
+    tex: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"]],
+      tags: 'ams'
+    },
+    options: {
+      renderActions: {
+        findScript: [10, doc => {
+          for (const node of document.querySelectorAll('script[type^="math/tex"]')) {
+            const display = !!node.type.match(/; *mode=display/)
+            const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display)
+            const text = document.createTextNode('')
+            node.parentNode.replaceChild(text, node)
+            math.start = {node: text, delim: '', n: 0}
+            math.end = {node: text, delim: '', n: 0}
+            doc.math.push(math)
+          }
+        }, ''],
+        addClass: [200,() => {
+          document.querySelectorAll('mjx-container:not([display=\'true\']').forEach( node => {
+            const target = node.parentNode
+            if (!target.classList.contains('has-jax')) {
+              target.classList.add('mathjax-overflow')
+            }
+          })
+        }, '', false]
+      }
+    }
+  }
+  
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'
+  script.id = 'MathJax-script'
+  script.async = true
+  document.head.appendChild(script)
+} else {
+  MathJax.startup.document.state(0)
+  MathJax.texReset()
+  MathJax.typeset()
+}</script><script>function loadValine () {
+  function initValine () {
+    let initData = {
+      el: '#vcomment',
+      appId: '',
+      appKey: '',
+      placeholder: 'Please leave your footprints',
+      avatar: 'monsterid',
+      meta: 'nick,mail,link'.split(','),
+      pageSize: '10',
+      lang: 'zh-CN',
+      recordIP: false,
+      serverURLs: '',
+      emojiCDN: '',
+      emojiMaps: "",
+      enableQQ: false,
+      path: window.location.pathname,
+    }
+
+    if (true) { 
+      initData.requiredFields= ('nick,mail'.split(','))
+    }
+    
+    if (false) {
+      const otherData = false
+      initData = Object.assign({}, initData, otherData)
+    }
+    
+    const valine = new Valine(initData)
+  }
+
+  if (typeof Valine === 'function') initValine() 
+  else $.getScript('https://cdn.jsdelivr.net/npm/valine/dist/Valine.min.js', initValine)
+}
+
+if ('Valine' === 'Valine' || !true) {
+  if (true) btf.loadComment(document.querySelector('#vcomment'),loadValine)
+  else setTimeout(() => loadValine(), 0)
+} else {
+  function loadOtherComment () {
+    loadValine()
+  }
+}</script></div></div></body></html>
