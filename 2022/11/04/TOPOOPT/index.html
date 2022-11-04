@@ -1,0 +1,346 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化 | 论文与代码阅读笔记</title><meta name="keywords" content="NSDI,分布式训练,机器学习系统,网络"><meta name="author" content="GDD"><meta name="copyright" content="GDD"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta http-equiv="Cache-Control" content="no-transform"><meta http-equiv="Cache-Control" content="no-siteapp"><meta name="description" content="在本文中，作者对从阿里巴巴 PAI 6000多个GPU的生产MLaaS集群收集的两个月工作负载跟踪进行了表征研究，解释了集群调度面临的挑战，描述了目前的解决方案，并公开了数据集。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化">
+<meta property="og:url" content="https://diandiangu.github.io/2022/11/04/TOPOOPT/index.html">
+<meta property="og:site_name" content="论文与代码阅读笔记">
+<meta property="og:description" content="在本文中，作者对从阿里巴巴 PAI 6000多个GPU的生产MLaaS集群收集的两个月工作负载跟踪进行了表征研究，解释了集群调度面临的挑战，描述了目前的解决方案，并公开了数据集。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://diandiangu.github.io/img/TOPOOPT/1.png">
+<meta property="article:published_time" content="2022-11-04T07:52:35.000Z">
+<meta property="article:modified_time" content="2022-11-04T09:34:36.448Z">
+<meta property="article:author" content="GDD">
+<meta property="article:tag" content="NSDI">
+<meta property="article:tag" content="分布式训练">
+<meta property="article:tag" content="机器学习系统">
+<meta property="article:tag" content="网络">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://diandiangu.github.io/img/TOPOOPT/1.png"><link rel="shortcut icon" href="/img/favicon.jpeg"><link rel="canonical" href="https://diandiangu.github.io/2022/11/04/TOPOOPT/"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css"><script>var GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"search.xml","languages":{"hits_empty":"找不到您查询的内容：${query}"}},
+  translate: {"defaultEncoding":2,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"简"},
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  ClickShowText: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  justifiedGallery: {
+    js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+    css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+};
+
+var saveToLocal = {
+  set: function setWithExpiry(key, value, ttl) {
+    const now = new Date()
+    const expiryDay = ttl * 86400000
+    const item = {
+      value: value,
+      expiry: now.getTime() + expiryDay,
+    }
+    localStorage.setItem(key, JSON.stringify(item))
+  },
+
+  get: function getWithExpiry(key) {
+    const itemStr = localStorage.getItem(key)
+
+    if (!itemStr) {
+      return undefined
+    }
+    const item = JSON.parse(itemStr)
+    const now = new Date()
+
+    if (now.getTime() > item.expiry) {
+      localStorage.removeItem(key)
+      return undefined
+    }
+    return item.value
+  }
+}</script><script id="config_change">var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2022-11-04 17:34:36'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(function () {  window.activateDarkMode = function () {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+    }
+  }
+  window.activateLightMode = function () {
+    document.documentElement.setAttribute('data-theme', 'light')
+   if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+    }
+  }
+  const autoChangeMode = 'false'
+  const t = saveToLocal.get('theme')
+  if (autoChangeMode === '1') {
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+    const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+    const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+    if (t === undefined) {
+      if (isLightMode) activateLightMode()
+      else if (isDarkMode) activateDarkMode()
+      else if (isNotSpecified || hasNoSupport) {
+        const now = new Date()
+        const hour = now.getHours()
+        const isNight = hour <= 6 || hour >= 18
+        isNight ? activateDarkMode() : activateLightMode()
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+        if (saveToLocal.get('theme') === undefined) {
+          e.matches ? activateDarkMode() : activateLightMode()
+        }
+      })
+    } else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else if (autoChangeMode === '2') {
+    const now = new Date()
+    const hour = now.getHours()
+    const isNight = hour <= 6 || hour >= 18
+    if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+    else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else {
+    if (t === 'dark') activateDarkMode()
+    else if (t === 'light') activateLightMode()
+  }const asideStatus = saveToLocal.get('aside-status')
+if (asideStatus !== undefined) {
+   if (asideStatus === 'hide') {
+     document.documentElement.classList.add('hide-aside')
+   } else {
+     document.documentElement.classList.remove('hide-aside')
+   }
+}})()</script><meta name="generator" content="Hexo 5.4.0"><link rel="alternate" href="/atom.xml" title="论文与代码阅读笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="author-avatar"><img class="avatar-img" src="/img/favicon.jpeg" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a></div></div><div class="data-item is-center"><div class="data-item-link"><a href="/tags/"><div class="headline">标签</div><div class="length-num">28</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div></div></div><div id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/TOPOOPT/1.png)"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">论文与代码阅读笔记</a></span><span id="menus"><div id="search_button"><a class="site-page social-icon search"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> Tags</span></a></div></div><span class="close" id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></span></span></nav><div id="post-info"><h1 class="post-title">TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2022-11-04T07:52:35.000Z" title="发表于 2022-11-04 15:52:35">2022-11-04</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2022-11-04T09:34:36.448Z" title="更新于 2022-11-04 17:34:36">2022-11-04</time></span></div><div class="meta-secondline"> </div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h1 id="TOPOOPT-Co-optimizing-Network-Topology-and-Parallelization-Strategy-for-Distributed-Training-Jobs"><a href="#TOPOOPT-Co-optimizing-Network-Topology-and-Parallelization-Strategy-for-Distributed-Training-Jobs" class="headerlink" title="TOPOOPT: Co-optimizing Network Topology and Parallelization Strategy for Distributed Training Jobs"></a>TOPOOPT: Co-optimizing Network Topology and Parallelization Strategy for Distributed Training Jobs</h1><p>如今的DNN训练系统建立在传统数据中心集群的基础上，交换机以多层胖树拓扑结构（Fat-tree）排列。胖树拓扑忽略流量的特征，服务器对之间的带宽和延迟一致。当工作负载不可预测且主要由短传输组成时，是一种理想的网络拓扑结构；但是胖树网络是分布式DNN训练工作负载的瓶颈：根据Meta的生产环境中，网络overhead占据训练时间的60%。由于DNN训练的通信流量特征是可预测的，可以根据这个特点协同优化网络拓扑和并行策略。</p>
+<h2 id="动机"><a href="#动机" class="headerlink" title="动机"></a>动机</h2><h3 id="DNN训练的特点"><a href="#DNN训练的特点" class="headerlink" title="DNN训练的特点"></a>DNN训练的特点</h3><p>数据并行时分布式训练中的一种常见做法，进行数据并行时不同工作节点之间通常以参数服务器、ring-AllReduce 、tree-AllReduce等拓扑结构进行通信。此外，单个GPU的内存无法容纳大型DNN模型，因此需要使用模型并行性将模型划分到多个GPU上。此外，由于跨GPU同步模型参数的成本越来越高，纯数据并行性对于大型训练作业来说很不理想，因此，人们使用数据和模型并行的混合来分布大型DNN，其中DNN的不同部分及其数据集在不同的GPU上并行处理。</p>
+<p>每个训练迭代都包括两种主要类型的数据依赖关系。（1）在正向和反向传播期间计算的激活和梯度数据；（2）一旦处理了一批样本，就通过AllReduce步骤在加速器之间同步模型权重。根据并行化策略，这些数据依赖性可能产生本地内存访问或跨GPU流量。下文将类型（1）产生的网络流量称为MP传输，将类型（2）产生的网络流量称为AllReduce传输。</p>
+<p>以深度学习推荐模型（DLRM）为例，如果模型有4个embedding表，embedding具有512列、10^7行，只采用数据并行的时候，会产生44GB的AllReduce数据传输，但是如果采用混合并行，最大的数据传输量只有4GB。因此，数据并行和模型并行结合对于大型模型来说十分必要。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/2.png" width="55%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图1：不同并行策略下的DLRM模型通信heatmap</div>
+</center>
+<br>
+
+<h3 id="生产环境数据分析"><a href="#生产环境数据分析" class="headerlink" title="生产环境数据分析"></a>生产环境数据分析</h3><p>图2展示了Meta产业环境中的网络overhead，随着GPU数量的增加，网络很快占据了训练迭代时间的很大一部分。网络开销占Meta生产环境中DNN训练迭代时间的60%。这个瓶颈表明，现有的数据中心网络不足以满足新兴的DNN训练的工作负载。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/3.png" width="35%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图2：Meta产业环境中的网络overhead</div>
+</center>
+<br>
+
+<p>图3展示了Meta生产GPU集群中运行的四个训练作业的服务器到服务器流量的heatmap。图中的所有heatmap都包含对角线上的正方形（深蓝色），这表示服务器之间的环形通信模式。但是MP传输（浅蓝色和绿色方块）取决于模型，因为MP传输取决于训练作业的并行化策略和设备放置。在整个训练过程中，不同的迭代之间，训练作业的流量模式是一样的。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/4.png" width="85%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图3：Meta生产GPU集群中运行的四个训练作业的服务器到服务器流量的heatmap</div>
+</center>
+<br>
+
+<h2 id="系统设计"><a href="#系统设计" class="headerlink" title="系统设计"></a>系统设计</h2><p>本文提出的TOPOOPT是一种基于光学设备的新型系统，它联合优化DNN并行策略和拓扑结构，以加速训练作业。</p>
+<p>TOPOOPT集群是一种可分片的直接连接结构，其中每台服务器都有d个接口连接到d个光交换机的核心层，如图4所示。光交换机使TOPOOPT能够将集群分片，产生每个训练作业的专用分区。每个分片的大小取决于作业申请的服务器数量。给定DNN训练工作和一组服务器，TOPOOPT首先离线在服务器之间找到最佳并行化策略和拓扑结构；然后，TOPOOPT重新配置光交换机以实现作业的目标拓扑。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/5.png" width="60%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图4：TOPOOPT的连接</div>
+</center>
+<br>
+
+<p>此外，本文使用了Host-based forwarding等现有工作使用了的优化方法优化网络。</p>
+<h2 id="算法设计"><a href="#算法设计" class="headerlink" title="算法设计"></a>算法设计</h2><p>单独寻找最优并行策略是一个NP-complete的问题，网络拓扑和路由使得问题更加困难。</p>
+<p>TOPOOPT将搜索空间分成两个平面：Comp.×Comm. 和Comm.×Topo.。本文交替优化，在一个平面中迭代搜索，同时保持另一个平面的结果不变。图5说明了交替优化框架：TOPOOPT使用FlexFlow的MCMC（马尔可夫链蒙特卡罗）搜索算法，在考虑通信成本的同时，为给定网络拓扑找到最佳并行化策略。如果并行化策略提高了训练迭代时间，TOPOOPT将其提供给Comm.×Topo.平面，使用TOPOOPT的TOPOLOGY FINDER算法找到有效的网络拓扑和路由。然后将发现的拓扑反馈到Comp.×Comm.。这进一步优化了基于新拓扑的并行化策略和设备布局。该优化循环重复直到收敛或k次迭代之后，其中k是可配置的超参数。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/1.png" width="70%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图5：TOPOOPT算法流程</div>
+</center>
+<br>
+
+<p>TOPOOPT有两个目标：（i）为AllReduce传输分配充足的带宽（因为大部分流量属于AllReduce）；（ii）确保MP传输的跳数较小。这两个目标是可以同时实现的，因为DNN训练流量具有一种独特的特性——AllReduce流量是可变的。</p>
+<p>例如，图6展示了三种不同的AllReduce链接方式，它们对应的traffic heatmap分别如图7所示。蓝色的AllReduce通信的位置是可以变化的，但是MP传输的heatmap保持不变。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/6.png" width="70%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图6：Ring-AllReduce permutations</div>
+</center>
+<br>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/7.png" width="70%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图7：DLRM traffic heatmaps</div>
+</center>
+<br>
+流量易变性意味着，如果一组服务器按特定顺序连接，只需重新排列服务器的标签，就可以得到另一种顺序，以相同的延迟完成AllReduce操作，同时可能为MP传输提供较小的跳数。TOPOOPT不是只选择一个AllReduce顺序，而是为每个AllReducer组找到多个排列，并与它们对应的子拓扑重叠。这样，TOPOOPT可以有效地服务AllReduce流量，同时减少MP传输的跳数。
+
+<p>为了减少所有可能排列的搜索空间，本文设计了TotientPerms算法，以基于群论找到所有规则环（连续服务器的索引之间的距离相等的环）的生成法则。然后，SelectPermutations算法可以减少集群的直径，以利于MP传输。</p>
+<h2 id="实验验证"><a href="#实验验证" class="headerlink" title="实验验证"></a>实验验证</h2><p>本文在6种不同的DNN模型上进行了模拟实验比较，其中DLRM和NCF模型的MP传输量更大。与成本相似的胖树拓扑相比，TOPOOPT将DNN训练时间减少了3.4倍。</p>
+<center>
+    <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" 
+    src="/img/TOPOOPT/8.png" width="70%">
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">图8：在128台服务器上的效果</div>
+</center>
+<br>
+
+
+
+<hr>
+<p><strong>原文作者：</strong>Weiyang Wang, Moein Khazraee, Zhizhen Zhong, Manya Ghobadi, Zhihao Jia, Dheevatsa Mudigere, Ying Zhang, Anthony Kewitsch<br><strong>原文链接：</strong><a target="_blank" rel="noopener" href="https://arxiv.org/abs/2202.00433">https://arxiv.org/abs/2202.00433</a></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">GDD</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://diandiangu.github.io/2022/11/04/TOPOOPT/">https://diandiangu.github.io/2022/11/04/TOPOOPT/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://diandiangu.github.io" target="_blank">论文与代码阅读笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/NSDI/">NSDI</a><a class="post-meta__tags" href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/">分布式训练</a><a class="post-meta__tags" href="/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/">机器学习系统</a><a class="post-meta__tags" href="/tags/%E7%BD%91%E7%BB%9C/">网络</a></div><div class="post_share"><div class="social-share" data-image="/img/TOPOOPT/1.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="next-post pull-full"><a href="/2022/02/20/MLaaS/"><img class="next-cover" src="/img/MLaaS/1.png" onerror="onerror=null;src='/img/404.jpg'"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">大规模异构GPU集群中的作业负载分析与调度</div></div></a></div></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span> 相关推荐</span></div><div class="relatedPosts-list"><div><a href="/2021/04/13/AFS/" title="AFS：分布式深度学习中的弹性资源共享"><img class="cover" src="/img/AFS/3.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-04-13</div><div class="title">AFS：分布式深度学习中的弹性资源共享</div></div></a></div><div><a href="/2022/02/20/MLaaS/" title="大规模异构GPU集群中的作业负载分析与调度"><img class="cover" src="/img/MLaaS/1.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2022-02-20</div><div class="title">大规模异构GPU集群中的作业负载分析与调度</div></div></a></div><div><a href="/2020/12/02/AntMan-0/" title="AntMan：面向深度学习的GPU集群动态弹性伸缩方法"><img class="cover" src="/img/antman/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-02</div><div class="title">AntMan：面向深度学习的GPU集群动态弹性伸缩方法</div></div></a></div><div><a href="/2020/12/07/BS/" title="ByteScheduler: 加速分布式训练的通信调度器"><img class="cover" src="/img/BS/4.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2020-12-07</div><div class="title">ByteScheduler: 加速分布式训练的通信调度器</div></div></a></div><div><a href="/2021/03/15/BytePS/" title="BytePS：加速异构集群中分布式训练的统一架构"><img class="cover" src="/img/BytePS/2.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-03-15</div><div class="title">BytePS：加速异构集群中分布式训练的统一架构</div></div></a></div><div><a href="/2021/09/19/Blink/" title="Blink：面向分布式机器学习的快速、通用的通信原语"><img class="cover" src="/img/Blink/Blink.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2021-09-19</div><div class="title">Blink：面向分布式机器学习的快速、通用的通信原语</div></div></a></div></div></div><hr/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div class="vcomment" id="vcomment"></div></div></div></div></div><div class="aside_content" id="aside_content"><div class="card-widget card-info"><div class="card-content"><div class="card-info-avatar is-center"><img class="avatar-img" src="/img/favicon.jpeg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/><div class="author-info__name">GDD</div><div class="author-info__description"></div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a></div><div class="card-info-data-item is-center"><a href="/tags/"><div class="headline">标签</div><div class="length-num">28</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/gudiandian"><i class="fab fa-github"></i><span>Follow Me on GitHub</span></a></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="card-content"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#TOPOOPT-Co-optimizing-Network-Topology-and-Parallelization-Strategy-for-Distributed-Training-Jobs"><span class="toc-number">1.</span> <span class="toc-text">TOPOOPT: Co-optimizing Network Topology and Parallelization Strategy for Distributed Training Jobs</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8A%A8%E6%9C%BA"><span class="toc-number">1.1.</span> <span class="toc-text">动机</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#DNN%E8%AE%AD%E7%BB%83%E7%9A%84%E7%89%B9%E7%82%B9"><span class="toc-number">1.1.1.</span> <span class="toc-text">DNN训练的特点</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%94%9F%E4%BA%A7%E7%8E%AF%E5%A2%83%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90"><span class="toc-number">1.1.2.</span> <span class="toc-text">生产环境数据分析</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1"><span class="toc-number">1.2.</span> <span class="toc-text">系统设计</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AE%97%E6%B3%95%E8%AE%BE%E8%AE%A1"><span class="toc-number">1.3.</span> <span class="toc-text">算法设计</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%9E%E9%AA%8C%E9%AA%8C%E8%AF%81"><span class="toc-number">1.4.</span> <span class="toc-text">实验验证</span></a></li></ol></li></ol></div></div></div><div class="card-widget card-recent-post"><div class="card-content"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2022/11/04/TOPOOPT/" title="TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化"><img src="/img/TOPOOPT/1.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化"/></a><div class="content"><a class="title" href="/2022/11/04/TOPOOPT/" title="TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化">TOPOOPT：面向分布式训练作业的网络拓扑与并行策略协同优化</a><time datetime="2022-11-04T07:52:35.000Z" title="发表于 2022-11-04 15:52:35">2022-11-04</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2022/02/20/MLaaS/" title="大规模异构GPU集群中的作业负载分析与调度"><img src="/img/MLaaS/1.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="大规模异构GPU集群中的作业负载分析与调度"/></a><div class="content"><a class="title" href="/2022/02/20/MLaaS/" title="大规模异构GPU集群中的作业负载分析与调度">大规模异构GPU集群中的作业负载分析与调度</a><time datetime="2022-02-20T09:56:46.000Z" title="发表于 2022-02-20 17:56:46">2022-02-20</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2022/01/10/techniques/" title="每天一个没用的代码小技巧"><img src="/img/techniques/dog.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="每天一个没用的代码小技巧"/></a><div class="content"><a class="title" href="/2022/01/10/techniques/" title="每天一个没用的代码小技巧">每天一个没用的代码小技巧</a><time datetime="2022-01-10T04:18:31.000Z" title="发表于 2022-01-10 12:18:31">2022-01-10</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/11/14/CO2e/" title="碳排放与大规模神经网络训练"><img src="/img/CO2e/CO2e.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="碳排放与大规模神经网络训练"/></a><div class="content"><a class="title" href="/2021/11/14/CO2e/" title="碳排放与大规模神经网络训练">碳排放与大规模神经网络训练</a><time datetime="2021-11-14T09:02:49.000Z" title="发表于 2021-11-14 17:02:49">2021-11-14</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2021/09/19/Blink/" title="Blink：面向分布式机器学习的快速、通用的通信原语"><img src="/img/Blink/Blink.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Blink：面向分布式机器学习的快速、通用的通信原语"/></a><div class="content"><a class="title" href="/2021/09/19/Blink/" title="Blink：面向分布式机器学习的快速、通用的通信原语">Blink：面向分布式机器学习的快速、通用的通信原语</a><time datetime="2021-09-19T12:53:53.000Z" title="发表于 2021-09-19 20:53:53">2021-09-19</time></div></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2022 By GDD</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="translateLink" type="button" title="简繁转换">简</button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="直达评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></div><div id="local-search"><div class="search-dialog"><div class="search-dialog__title" id="local-search-title">本地搜索</div><div id="local-input-panel"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div></div><hr/><div id="local-search-results"><div id="local-hits"></div><div id="local-stats"><div class="local-search-stats__hr" id="hr"><span>由</span> <a target="_blank" rel="noopener" href="https://github.com/wzpan/hexo-generator-search" style="color:#49B1F5;">hexo-generator-search</a>
+ <span>提供支持</span></div></div></div><span class="search-close-button"><i class="fas fa-times"></i></span></div><div id="search-mask"></div></div><div><script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="/js/tw_cn.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js"></script><script src="/js/search/local-search.js"></script><div class="js-pjax"><script>if (!window.MathJax) {
+  window.MathJax = {
+    loader: {
+      source: {
+        '[tex]/amsCd': '[tex]/amscd'
+      }
+    },
+    tex: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"]],
+      tags: 'ams'
+    },
+    options: {
+      renderActions: {
+        findScript: [10, doc => {
+          for (const node of document.querySelectorAll('script[type^="math/tex"]')) {
+            const display = !!node.type.match(/; *mode=display/)
+            const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display)
+            const text = document.createTextNode('')
+            node.parentNode.replaceChild(text, node)
+            math.start = {node: text, delim: '', n: 0}
+            math.end = {node: text, delim: '', n: 0}
+            doc.math.push(math)
+          }
+        }, ''],
+        addClass: [200,() => {
+          document.querySelectorAll('mjx-container:not([display=\'true\']').forEach( node => {
+            const target = node.parentNode
+            if (!target.classList.contains('has-jax')) {
+              target.classList.add('mathjax-overflow')
+            }
+          })
+        }, '', false]
+      }
+    }
+  }
+  
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'
+  script.id = 'MathJax-script'
+  script.async = true
+  document.head.appendChild(script)
+} else {
+  MathJax.startup.document.state(0)
+  MathJax.texReset()
+  MathJax.typeset()
+}</script><script>function loadValine () {
+  function initValine () {
+    let initData = {
+      el: '#vcomment',
+      appId: '',
+      appKey: '',
+      placeholder: 'Please leave your footprints',
+      avatar: 'monsterid',
+      meta: 'nick,mail,link'.split(','),
+      pageSize: '10',
+      lang: 'zh-CN',
+      recordIP: false,
+      serverURLs: '',
+      emojiCDN: '',
+      emojiMaps: "",
+      enableQQ: false,
+      path: window.location.pathname,
+    }
+
+    if (true) { 
+      initData.requiredFields= ('nick,mail'.split(','))
+    }
+    
+    if (false) {
+      const otherData = false
+      initData = Object.assign({}, initData, otherData)
+    }
+    
+    const valine = new Valine(initData)
+  }
+
+  if (typeof Valine === 'function') initValine() 
+  else $.getScript('https://cdn.jsdelivr.net/npm/valine/dist/Valine.min.js', initValine)
+}
+
+if ('Valine' === 'Valine' || !true) {
+  if (true) btf.loadComment(document.querySelector('#vcomment'),loadValine)
+  else setTimeout(() => loadValine(), 0)
+} else {
+  function loadOtherComment () {
+    loadValine()
+  }
+}</script></div></div></body></html>
