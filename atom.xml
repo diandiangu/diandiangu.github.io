@@ -6,7 +6,7 @@
   <link href="https://diandiangu.github.io/atom.xml" rel="self"/>
   
   <link href="https://diandiangu.github.io/"/>
-  <updated>2023-04-25T12:09:15.296Z</updated>
+  <updated>2023-09-26T13:12:48.115Z</updated>
   <id>https://diandiangu.github.io/</id>
   
   <author>
@@ -15,6 +15,31 @@
   </author>
   
   <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>BPipe: 面向大语言模型训练的内存均衡的流水线并行</title>
+    <link href="https://diandiangu.github.io/2023/09/25/BPipe/"/>
+    <id>https://diandiangu.github.io/2023/09/25/BPipe/</id>
+    <published>2023-09-25T10:52:07.000Z</published>
+    <updated>2023-09-26T13:12:48.115Z</updated>
+    
+    <content type="html"><![CDATA[<h1 id="BPIPE-Memory-Balanced-Pipeline-Parallelism-for-Training-Large-Language-Models"><a href="#BPIPE-Memory-Balanced-Pipeline-Parallelism-for-Training-Large-Language-Models" class="headerlink" title="BPIPE: Memory-Balanced Pipeline Parallelism for Training Large Language Models"></a>BPIPE: Memory-Balanced Pipeline Parallelism for Training Large Language Models</h1><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>流水线并行为每个GPU分配一个单独的流水线阶段（stage），用于计算模型中的不同层。因此，每个流水线阶段都具有对其他阶段的数据依赖性，并导致计算暂停直到所需的数据到达，通常称为“流水线气泡”（bubble）。为了最大限度地减少气泡，1F1B（一个正向和一个反向）流水线将输入micro-batch，并交替处理正向计算和反向计算。为了使所有流水线阶段饱和，早期阶段比后期阶段保留更多的内存用于计算更多的前向微批。因此，流水线阶段之间存在内存不平衡，如果早期阶段内存不足，则执行模型失败，如图1所示。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/BPipe/1.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图1：BPIPE如何处理内存不足问题的说明</div></center><br><p>作者观察到，后期阶段无法使用与早期阶段相同大小的GPU内存来预计算前向micro batch。因此，如果我们能够利用后期的空闲内存作为前期的额外内存，那么均衡的内存负载将缓解内存压力。此外，降低的内存压力使我们能够利用更多的内存来加速训练，避免冗余的重新计算、增加微批量大小或降低模型并行度。</p><h2 id="方法"><a href="#方法" class="headerlink" title="方法"></a>方法</h2><h3 id="激活值平衡"><a href="#激活值平衡" class="headerlink" title="激活值平衡"></a>激活值平衡</h3><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/BPipe/2.png" width="65%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图2：8个微批次的4路1F1B流水线并行</div></center><br><p>在具有m个微批次的p路流水线并行中，用A(s)表示第s个阶段最多存储的激活值的内存量，W(s)为包括优化器状态在内的模型参数大小，则第s个阶段的内存使用量M(s) = A(s) + W(s)。假如没有一个阶段的模型层数相同，则W(s)为一个恒定的值W_0。μ(s)为第s个阶段最多能保存的微批次数量，A(s) = A0μ(s)，M(s) = W0 + A0μ(s)。</p><p>根据图2，1F1B流水线中的每一个阶段最多通信μ(s) = min(p − s, m)次。实际上，为了让所有流水线的阶段饱和，m远大于p。因此，μ(s) = p − s。</p><p>作者将阶段s和阶段p−s−1配对，每一对中的内存不均衡可以被写为：M(s) − M(p − s − 1) = A_0(p − 2s − 1)。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/BPipe/3.png" width="65%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图3：激活平衡的图示</div></center><br><h3 id="传输调度"><a href="#传输调度" class="headerlink" title="传输调度"></a>传输调度</h3><p>为了达到内存均衡的目标，不同阶段之间数据的传输需要调度，调度算法决定何时传输或者加载什么数据。算法的核心思想是：（1）保证μ(s)不超过优化的最优值；（2）反向传播计算需要某个激活值，但是该激活值不在相应的GPU上的时候，去其配对的GPU上加载激活值；（3）如果某次激活值的加载会使得μ(s)超过优化的最优值，则算法会提前传输出去一个激活值，以此预留出足够的内存。</p><h3 id="“阶段对”的GPU分配"><a href="#“阶段对”的GPU分配" class="headerlink" title="“阶段对”的GPU分配"></a>“阶段对”的GPU分配</h3><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/BPipe/4.png" width="50%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图4：标准GPU分配和BPipe的配对分配</div></center><br><p>如图4所示，BPipe把配对的一对GPU分配在相邻的位置，这样可以减小激活值传输的时间，从而让激活值传输的时间被计算的时间完全overlap，从而减小BPipe内存优化对计算性能的影响。这样虽然会让训练时不同stage之间的通信变慢，但是内存平衡的通信时间比训练时不同stage数据依赖的通信量更大。</p><h2 id="实验评估"><a href="#实验评估" class="headerlink" title="实验评估"></a>实验评估</h2><p>作者通过分别的CUDA stream进行激活值的传输和加载，为激活值手动管理CUDA内存。作者在6台具有8个A100 GPU的服务器上进行了实验，实验中训练了GPT-3模型。</p><p>实验结果表明，BPipe按照Megatron-LM无法执行的配置进行GPT-3的训练，比Megatron-LM执行最快的配置快1.25倍。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/BPipe/5.png" width="80%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图5：标准化后的训练吞吐量</div></center><br><h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>本文提出了BPipe，通过在流水线阶段之间传输中间激活的激活平衡，BPIPE解决了流水线并行的内存不平衡问题。实验评估表明，BPipe通过执行更快的训练配置来加快大规模GPT-3模型的训练，并且如果没有BPipe，这样的配置无法运行起来。</p><hr><p><strong>原文作者：</strong>Taebum Kim, Hyoungjoo Kim, Gyeong-In Yu, Byung-Gon Chun<br><strong>原文链接：</strong><a href="https://openreview.net/pdf?id=HVKmLi1iR4">https://openreview.net/pdf?id=HVKmLi1iR4</a></p>]]></content>
+    
+    
+    <summary type="html">流水线并行是在GPU集群中训练大型语言模型的关键技术。然而，流水线并行通常会导致内存不平衡问题，某些GPU的内存压力很大，而其他GPU则没有充分利用其内存。这种不平衡会影响训练性能。为了解决这种低效性，BPIPE在流水线并行中实现内存平衡。BPIPE在训练期间在GPU之间传输中间激活值，使所有GPU都能利用相当大小的内存。通过平衡内存利用率，BPIPE消除冗余重新计算或增加微批大小，从而提高GPT-3等大型语言模型的训练效率。</summary>
+    
+    
+    
+    
+    <category term="分布式训练" scheme="https://diandiangu.github.io/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%AD%E7%BB%83/"/>
+    
+    <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
+    
+    <category term="ICML" scheme="https://diandiangu.github.io/tags/ICML/"/>
+    
+    <category term="大模型" scheme="https://diandiangu.github.io/tags/%E5%A4%A7%E6%A8%A1%E5%9E%8B/"/>
+    
+  </entry>
   
   <entry>
     <title>Lucid：一个可扩展、可解释的实用型深度学习作业调度器</title>
@@ -466,31 +491,6 @@
     <category term="SIGCOMM" scheme="https://diandiangu.github.io/tags/SIGCOMM/"/>
     
     <category term="网络通信" scheme="https://diandiangu.github.io/tags/%E7%BD%91%E7%BB%9C%E9%80%9A%E4%BF%A1/"/>
-    
-  </entry>
-  
-  <entry>
-    <title>PipeSwitch：面向深度学习应用的高效多进程管理</title>
-    <link href="https://diandiangu.github.io/2020/12/07/PipeSwitch/"/>
-    <id>https://diandiangu.github.io/2020/12/07/PipeSwitch/</id>
-    <published>2020-12-07T08:53:00.000Z</published>
-    <updated>2021-03-07T07:43:56.000Z</updated>
-    
-    <content type="html"><![CDATA[<h1 id="PipeSwitch-Fast-Pipelined-Context-Switching-for-Deep-Learning-Applications"><a href="#PipeSwitch-Fast-Pipelined-Context-Switching-for-Deep-Learning-Applications" class="headerlink" title="PipeSwitch: Fast Pipelined Context Switching for Deep Learning Applications"></a>PipeSwitch: Fast Pipelined Context Switching for Deep Learning Applications</h1><p>深度学习（DL）任务包括需要高通量的训练任务和需要低延迟的推理任务。目前的主流做法是提供专门的GPU集群，分别用于训练和推理。由于需要满足严格的服务级别目标（SLO），GPU群集通常会根据峰值负载过度配置，而不同任务类型之间以及应用程序之间对GPU的共享有一定的限制。本文提出了一个PipeSwitch系统，它可以使一个推理程序的未使用周期由训练或其他推理应用程序填充。它允许多个DL应用程序与整个GPU内存共享同一个GPU，并只增加毫秒级的切换开销。使用PipeSwitch，GPU利用率可以显著提高，且不会牺牲SLO。本文通过引入流水线式的上下文切换来实现这一点。其核心思想是利用神经网络模型的层级结构及其逐层计算的模式，在PCIe上进行流水线模型传输，并在GPU中以模型感知分组的方式执行任务。本文还设计了统一的内存管理和Active-Standby Worker切换机制，以配合上下文切换的流水线并确保进程间的隔离。</p><h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>深度学习任务包括需要高通量的训练任务和需要低延迟的推理任务。目前的主流做法是提供专门的GPU集群，分别用于训练和推理。推理集群常常参考峰值负载而分配过多的资源，以满足严格的服务级别目标（SLO）。即使对于推理任务本身，在实际应用中，通常按每个GPU的粒度将资源分配到每个程序，以减少应用程序之间的干扰。</p><p>理想情况下，多个深度学习应用程序应该能够打包到同一个GPU服务器上，以便通过时间共享实现GPU利用率的最大化。这正是操作系统如何通过任务调度和文本转换来提高CPU利用率的。但是和CPU不同，GPU在任务之间切换时有很高的开销。为了避免这种交换开销，现有的解决方案是在空间上共享GPU内存。</p><p>然而，现有的多任务系统支持例如Nvidia MPS远谈不上高效（切换时间甚至达几秒，而很多推理任务的SLO可能是毫秒量级）。但这样的系统对于调度是有重要作用的。考虑这样一个场景：将训练和推理任务混合部署在同一个集群里。训练任务一般是时间较长，SLO不敏感；推理任务则是对SLO相当敏感，且可能具备明显的潮汐特性（例如一些在线推理到了晚上workload会比白天轻一些）。这两类任务的差异还是很显著的，因此很多公司倾向于将它们各自部署在单独的集群中，但就会导致资源利用率问题，比如训练任务无法在晚上利用推理集群空闲出来的GPU资源。如果我们既想要将训练和推理混合部署，同时又希望它们之间的切换能够高效呢？这就是PipeSwitch希望解决的问题。</p><h2 id="系统概览"><a href="#系统概览" class="headerlink" title="系统概览"></a>系统概览</h2><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/PipeSwitch/1.png" width="75%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图1：PipeSwitch的架构</div></center><br><p>图1展示了PipeSwitch服务器的架构，包括四种不同的构件：</p><ul><li>控制器。控制器是中心部件。它从客户端接收任务，并控制内存守护进程和工作进程来执行任务。</li><li>Memory Daemon。Memory Daemon管理GPU内存和DNN模型。它将GPU内存分配给活动工作线程，并将模型从主机内存传输到GPU内存。</li><li>Active Worker。Active Worker是当前在GPU中执行任务的worker。这里的worker指的是在一个GPU上执行任务的进程。</li><li>Standby Worker。服务器有一个或多个Standby Worker。Standby Worker处于空闲状态，正在初始化新任务，或者正在为上一个任务清理其环境</li></ul><p>如果要启动一个新任务，控制器要么等待当前任务完成（例如推理任务），要么通过通知Active Worker停止（例如训练任务）来抢占它。同时，控制器通知空闲的Standby Worker为新任务初始化其环境。在Active Worker完成或停止当前任务后，控制器通知Memory Daemon和Standby Worker将任务加载到GPU，以通过流水线式的模型传输执行。Memory Daemon将内存分配给Standby Worker，并将新任务使用的模型从主存传输到GPU内存。Standby Worker将成为新的Active Worker来执行新任务，而原来的ActiveWorker将成为Standby Worker并为上一个任务清理环境。本文的主要目标是根据深度学习应用程序的特点设计一种方法，以最小化该过程中的任务切换开销。</p><h2 id="系统设计"><a href="#系统设计" class="headerlink" title="系统设计"></a>系统设计</h2><h3 id="流水线式的模型传输"><a href="#流水线式的模型传输" class="headerlink" title="流水线式的模型传输"></a>流水线式的模型传输</h3><p>PipeSwitch利用了深度学习任务一个非常重要的特——DNN模型通常都包含多个layer，且计算都是按layer的顺序进行的，最前面的layer会在前向传播时首先被用到。所以在做context switch的时候，可以优先将靠前的layer所需要的状态信息加载进GPU中，同时GPU就先计算这些已经ready的layer，整个过程被流水线化了（如下图b所示）。而现有做法（图a）则是将整个DNN作为一个大黑盒，将它无脑地完整加载到GPU之后，再按layer进行计算。相比之下，显然PipeSwitch这种思路高效得多。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/PipeSwitch/2.png" width="75%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">图2：以一个推理任务为例说明流水线式模型传输的过程</div></center><br><p>但是这样做存在两个问题，一个是多次调用PCIe传输数据开销较大；另一个是每次数据传输后都要进行数据同步，开销较大。本文的做法是grouping：将几个layer的数据组合成一个group来进行传输。</p><h3 id="统一内存管理"><a href="#统一内存管理" class="headerlink" title="统一内存管理"></a>统一内存管理</h3><p>PipeSwitch利用深度学习应用程序的两个特性来最小化GPU内存管理开销。深度学习任务在GPU内存中存储两种重要的数据：DNN模型（包括模型参数）和中间结果。首先，分配给DNN模型的内存量是固定的，并且在任务执行期间不会改变。并且存储参数所需的内存量保持不变。第二，中间结果以简单、规则的模式进行变化，这不会导致内存碎片。对于推理任务，中间结果是每层的输出，下一层使用这些输出。在计算下一层之后，就不再需要它们了，可以安全地释放它们。训练任务的不同之处在于，在前向传球中生成的中间结果不能立即释放，因为它们也被backward用来更新权重。然而，backward以与forward相反的顺序消耗中间结果，即中间结果是先进后出。内存分配和释放可以通过一个简单的堆栈式机制来处理，而不会造成内存碎片。一般的任务管理方式不考虑这些特点，且对于快速的上下文切换来说不够轻量级。</p><p><strong>减少内存分配开销。</strong>PipeSwitch使用一个内存守护进程来管理GPU内存。为了与现有系统兼容并进行最小的更改，内存守护程序在系统启动时使用cudaMaloc来获取GPU内存，然后在运行时将内存动态分配给工作线程，而不是替换GPU内存管理器。这消除了每个工作人员使用cudaMaloc获取大量内存来存储其模型和中间结果的开销。内存守护进程只需要将内存指针传递给worker，这是轻量级的。守护进程确保每次只有一个worker拥有GPU内存，以保证工作进程之间的内存隔离。每个工作线程使用内存池分配内存以存储其模型和中间结果，并在不再需要中间结果后将内存回收到池中。</p><p><strong>最小化内存占用并避免额外的内存拷贝。</strong>PipeSwitch将模型存储在内存守护进程中，这样服务器只需要在主存中保留每个模型的一个副本。因为内存守护进程还管理GPU内存，所以它直接将模型从主存传输到GPU内存以进行任务启动，这就消除了从内存守护进程到worker的额外内存拷贝。</p><p><strong>最小化IPC开销。</strong>神经网络模型的内存分配过程是确定性的。具体地说，给定相同的GPU内存区域和相同的模型，只要内存守护进程和worker使用相同的顺序为模型参数分配内存，那么参数的内存指针将是相同的。内存守护进程和worker很容易保持相同的顺序，因为神经网络模型是已知的，并且内存守护进程只需要使用与worker相同的顺序来传输模型。内存守护进程只使用一次GPU IPC初始化worker，然后使用廉价的CPU IPC通知worker哪个管道组已经被传输，这样可以将昂贵的GPU IPC的使用降至最低。</p><h3 id="Active-Standby-Worker之间的切换"><a href="#Active-Standby-Worker之间的切换" class="headerlink" title="Active-Standby Worker之间的切换"></a>Active-Standby Worker之间的切换</h3><p>本文设计的一个Active-Standby Worker切换机制，隐藏了任务清理和任务初始化的开销：<br>每个worker都是一个独立的进程，并且在第一次创建它时初始化它自己的GPU环境（即CUDA上下文）。这消除了将新任务分配给工作线程时的GPU环境初始化开销。PipeSwitch将“同步点”插入到训练任务中，这样排队中函数的数量是有限的，并且可以快速清除GPU上排队的异步CUDA函数。而推理任务不需要同步点，因为推理任务可以很快完成且不被抢占。另一个任务是释放GPU内存。PipeSwitch的清除过程的一个重要特性是它不修改内存的内容，而只清理元数据，即GPU内存指针。由于GPU内存由PipeSwitch管理，清理过程只删除指向张量数据的指针，而不是释放实际数据。因此，新任务将其模型同时传输到GPU内存是安全的。也就是说，我们可以将当前任务的任务清理和新任务的流水线模型传输并行化，以隐藏任务清理的开销。</p><h2 id="实验评估"><a href="#实验评估" class="headerlink" title="实验评估"></a>实验评估</h2><p>作者首先使用end-to-end实验来证明PipeSwitch带来的效果，然后通过实验说明每个组件的设计的有效性。最终效果是PipeSwitch能够实现不超34.6ms的额外切换开销（远低于Nvidia MPS）。</p><center>    <img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="/img/PipeSwitch/3.jpeg" width="80%">    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">表1：用不同方法进行GPU上下文切换的overhead</div></center><br><h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>本文提出了PipeSwitch，一个能够为多个深度学习应用程序实现GPU高效细粒度分时的系统。PipeSwitch通过流水线式上下文切换来最小化深度应用程序GPU上的任务切换开销。流水线上下文交换包括三个关键技术：流水线式模型传输、统一内存管理和Active-Standby Worker切换。通过这些技术，PipeSwitch能够实现毫秒级的任务切换时间，使分时GPU上的深度应用程序能够满足严格的SLO。本文在各种DNN模型和GPU上进行了实验，验证了PipeSwitch的性能。PipeSwitch可以显著提高GPU的利用率，提高深度应用的灵活性。其实这种流水线的思路其实在去年SOSP上出现的PipeDream和ByteScheduler中也都有体现，也可以应用于与深度学习任务相关的其他方面的系统级优化。</p><hr><p><strong>原文作者：</strong>Zhihao Bai, Zhen Zhang, Yibo Zhu, Xin Jin<br><strong>原文链接：</strong><a href="https://www.usenix.org/system/files/osdi20-bai.pdf">https://www.usenix.org/system/files/osdi20-bai.pdf</a><br><strong>项目代码：</strong><a href="https://github.com/netx-repo/PipeSwitch">https://github.com/netx-repo/PipeSwitch</a><br><strong>参考文献：</strong>[1] OSDI 2020 有哪些值得关注的文章？<a href="https://www.zhihu.com/question/414538410/answer/1550912187">https://www.zhihu.com/question/414538410/answer/1550912187</a></p>]]></content>
-    
-    
-    <summary type="html">本文提出了一个PipeSwitch系统，它可以使一个推理程序的未使用周期由训练或其他推理应用程序填充。它允许多个DL应用程序与整个GPU内存共享同一个GPU，并只增加毫秒级的切换开销。使用PipeSwitch，GPU利用率可以显著提高，且不会牺牲SLO。本文还设计了统一的内存管理和Active-Standby Worker切换机制，以配合上下文切换的流水线并确保进程间的隔离。</summary>
-    
-    
-    
-    
-    <category term="机器学习系统" scheme="https://diandiangu.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E7%B3%BB%E7%BB%9F/"/>
-    
-    <category term="OSDI" scheme="https://diandiangu.github.io/tags/OSDI/"/>
-    
-    <category term="上下文切换" scheme="https://diandiangu.github.io/tags/%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2/"/>
-    
-    <category term="任务调度" scheme="https://diandiangu.github.io/tags/%E4%BB%BB%E5%8A%A1%E8%B0%83%E5%BA%A6/"/>
     
   </entry>
   
